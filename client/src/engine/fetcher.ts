@@ -1,4 +1,5 @@
 import { inflateZlib } from './inflator.js';
+import { PackClient } from './pack-client.js';
 import {
   computeSha1Hex,
   OidMismatchError,
@@ -40,6 +41,8 @@ export class GitRepositoryClient {
   private readonly inFlightRequests = new Map<GitOid, Promise<GitObject>>();
   private readonly maxCacheSize: number;
   private cachedMeta: RepoMeta | null = null;
+  private readonly packClients: PackClient[] = [];
+  private packsDiscovered = false;
 
   constructor(baseUrl = '', maxCacheSize = 500) {
     this.baseUrl = baseUrl.replace(/\/+$/, '');
@@ -336,62 +339,130 @@ export class GitRepositoryClient {
     return history;
   }
 
+  /**
+   * Discovers active packfiles in the repository via objects/info/packs.
+   */
+  public async discoverPacks(): Promise<readonly PackClient[]> {
+    if (this.packsDiscovered) {
+      return this.packClients;
+    }
+
+    const candidateUrls = [
+      `${this.baseUrl}/objects/info/packs`,
+      `${this.baseUrl}/.git/objects/info/packs`,
+    ];
+
+    for (const url of candidateUrls) {
+      try {
+        const res = await fetch(url);
+        if (res.ok) {
+          const text = await res.text();
+          const lines = text.split('\n');
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('P ')) continue;
+            const packFile = trimmed.slice(2).trim();
+            if (packFile) {
+              const packClient = new PackClient(this.baseUrl, packFile);
+              if (!this.packClients.some((c) => c.packUrl === packClient.packUrl)) {
+                this.packClients.push(packClient);
+              }
+            }
+          }
+          break;
+        }
+      } catch {
+        // Silently continue checking fallback URLs
+      }
+    }
+
+    this.packsDiscovered = true;
+    return this.packClients;
+  }
+
+  /**
+   * Explicitly registers a PackClient for object resolution.
+   */
+  public registerPack(packClient: PackClient): void {
+    if (!this.packClients.some((c) => c.packUrl === packClient.packUrl)) {
+      this.packClients.push(packClient);
+    }
+  }
+
+  /**
+   * Returns all currently registered packfile clients.
+   */
+  public getPackClients(): readonly PackClient[] {
+    return this.packClients;
+  }
+
   private async fetchAndParseObject(oid: GitOid): Promise<GitObject> {
     const prefix = oid.slice(0, 2);
     const rest = oid.slice(2);
     const url = `${this.baseUrl}/objects/${prefix}/${rest}`;
 
-    let lastError: Error | null = null;
-    const maxRetries = 2;
-
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        const res = await fetch(url);
-        if (!res.ok) {
-          if (res.status === 404) {
-            throw new ObjectNotFoundError(oid, res.status);
+    // Step 1: Try loose object fetch
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        let isHtml = false;
+        try {
+          const ct = res.headers.get('content-type');
+          if (ct?.includes('text/html')) {
+            isHtml = true;
           }
-          throw new Error(`HTTP error ${res.status} fetching object ${oid}`);
+        } catch {
+          // Headers not available in mock/environment
         }
 
-        const headersObj: unknown = res.headers;
-        if (headersObj && typeof headersObj === 'object' && 'get' in headersObj) {
-          const getHeader = (headersObj as { get?: unknown }).get;
-          if (typeof getHeader === 'function') {
-            const ct: unknown = (getHeader as (name: string) => unknown).call(headersObj, 'content-type');
-            if (typeof ct === 'string' && ct.includes('text/html')) {
-              throw new ObjectNotFoundError(oid, 404);
-            }
+        if (!isHtml) {
+          const compressed = new Uint8Array(await res.arrayBuffer());
+          const uncompressed = await inflateZlib(compressed);
+
+          // Verify SHA-1 integrity
+          const computedOid = await computeSha1Hex(uncompressed);
+          if (computedOid.toLowerCase() !== oid.toLowerCase()) {
+            throw new OidMismatchError(
+              `SHA-1 mismatch for object: expected ${oid}, computed ${computedOid}`
+            );
           }
-        }
 
-        const compressed = new Uint8Array(await res.arrayBuffer());
-        const uncompressed = await inflateZlib(compressed);
-
-        // Verify SHA-1 integrity
-        const computedOid = await computeSha1Hex(uncompressed);
-        if (computedOid.toLowerCase() !== oid.toLowerCase()) {
-          throw new OidMismatchError(
-            `SHA-1 mismatch for object: expected ${oid}, computed ${computedOid}`
-          );
+          const parsed = parseLooseObjectEnvelope(uncompressed, oid);
+          this.putCache(oid, parsed);
+          return parsed;
         }
-
-        const parsed = parseLooseObjectEnvelope(uncompressed, oid);
-        this.putCache(oid, parsed);
-        return parsed;
-      } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err));
-        if (lastError instanceof ObjectNotFoundError || lastError instanceof OidMismatchError) {
-          throw lastError;
-        }
-        if (attempt < maxRetries) {
-          // Exponential backoff
-          await new Promise((resolve) => setTimeout(resolve, (attempt + 1) * 100));
-        }
+      }
+    } catch (err) {
+      if (err instanceof OidMismatchError) {
+        throw err;
       }
     }
 
-    throw lastError ?? new Error(`Failed to fetch object ${oid}`);
+    // Step 2: Fallback to packfiles
+    try {
+      await this.discoverPacks();
+      for (const packClient of this.packClients) {
+        try {
+          if (await packClient.hasObject(oid)) {
+            const obj = await packClient.fetchObjectBySha(oid, this);
+            this.putCache(oid, obj);
+            return obj;
+          }
+        } catch (err) {
+          if (err instanceof OidMismatchError) {
+            throw err;
+          }
+          // Continue checking remaining packfile clients
+        }
+      }
+    } catch (err) {
+      if (err instanceof OidMismatchError) {
+        throw err;
+      }
+    }
+
+    // Step 3: Not found in loose objects or packfiles
+    throw new ObjectNotFoundError(oid, 404);
   }
 
   private putCache(oid: GitOid, obj: GitObject): void {

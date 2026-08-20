@@ -24,7 +24,11 @@ export class SendforgeHttpClient {
     });
 
     const status = res.status;
-    const resHeaders = {};
+    const resHeaders = {
+      get(name) {
+        return this[name.toLowerCase()] || null;
+      }
+    };
     for (const [k, v] of res.headers.entries()) {
       resHeaders[k.toLowerCase()] = v;
     }
@@ -38,7 +42,7 @@ export class SendforgeHttpClient {
       headers: resHeaders,
       buffer,
       text,
-      body: text,
+      body: buffer,
       json: () => {
         try {
           return JSON.parse(text);
@@ -169,3 +173,5 @@ export class SendforgeHttpClient {
     return results;
   }
 }
+
+export { SendforgeHttpClient as HttpClient };

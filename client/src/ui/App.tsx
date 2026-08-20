@@ -21,6 +21,8 @@ import { IssuesView } from './IssuesView.js';
 import { IssueDetailView } from './IssueDetailView.js';
 import { PullRequestsView } from './PullRequestsView.js';
 import { PRDetailView } from './PRDetailView.js';
+import { NewIssueModal } from './NewIssueModal.js';
+import { NewPRModal } from './NewPRModal.js';
 import { parseRoute, type Route } from './router.js';
 import { useEventListener, useStableCallback } from './hooks/useLifecycle.js';
 
@@ -55,6 +57,8 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
   const [allFiles, setAllFiles] = useState<readonly TreeFileItem[]>([]);
 
   const [isFinderOpen, setIsFinderOpen] = useState(false);
+  const [isNewIssueOpen, setIsNewIssueOpen] = useState(false);
+  const [isNewPROpen, setIsNewPROpen] = useState(false);
   const [isDownloadOpen, setIsDownloadOpen] = useState(false);
   const [downloadingFormat, setDownloadingFormat] = useState<'zip' | 'tar.gz' | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<{ completed: number; total: number } | null>(null);
@@ -699,6 +703,9 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
               onSelectIssue={(id) => {
                 window.location.hash = `#/issues/${id}`;
               }}
+              onNewIssue={() => {
+                setIsNewIssueOpen(true);
+              }}
             />
           )
         ) : selectedPullId && activePull ? (
@@ -726,6 +733,9 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
             onSelectPull={(id) => {
               window.location.hash = `#/pulls/${id}`;
             }}
+            onNewPull={() => {
+              setIsNewPROpen(true);
+            }}
           />
         )}
       </main>
@@ -737,6 +747,37 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
           setIsFinderOpen(false);
         }}
         onSelectFile={handleSelectFileFromFinder}
+      />
+
+      <NewIssueModal
+        isOpen={isNewIssueOpen}
+        onClose={() => {
+          setIsNewIssueOpen(false);
+        }}
+        repoName={meta?.name}
+        existingIssues={issues}
+        onIssueCreated={(newIssue) => {
+          setIssues((prev) => [newIssue, ...prev]);
+          setIsNewIssueOpen(false);
+          window.location.hash = `#/issues/${newIssue.id}`;
+        }}
+      />
+
+      <NewPRModal
+        isOpen={isNewPROpen}
+        onClose={() => {
+          setIsNewPROpen(false);
+        }}
+        client={client}
+        branches={meta?.branches ?? []}
+        defaultBranch={meta?.default_branch ?? 'main'}
+        repoName={meta?.name}
+        existingPulls={pulls}
+        onPullCreated={(newPR) => {
+          setPulls((prev) => [newPR, ...prev]);
+          setIsNewPROpen(false);
+          window.location.hash = `#/pulls/${newPR.id}`;
+        }}
       />
     </div>
   );

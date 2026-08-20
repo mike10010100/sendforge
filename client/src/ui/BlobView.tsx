@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { FunctionalComponent } from 'preact';
 import type { GitBlobObject } from '../engine/types.js';
 import type { GitRepositoryClient } from '../engine/fetcher.js';
@@ -15,6 +15,12 @@ import {
   type LineRange,
 } from './utils.js';
 import { useEventListener, useStableCallback } from './hooks/useLifecycle.js';
+import {
+  detectLanguage,
+  LineSyntaxCache,
+  sliceTokensForSearch,
+  tokenizeFile,
+} from './syntax.js';
 
 function uint8ArrayToBase64(bytes: Uint8Array): string {
   if (typeof Buffer !== 'undefined') {
@@ -38,6 +44,12 @@ export interface BlobViewProps {
   readonly selectedRange?: LineRange | null;
   readonly onSelectRange?: (range: LineRange | null) => void;
   readonly initialRange?: LineRange | null;
+}
+
+interface SearchMatchLocation {
+  readonly lineIndex: number;
+  readonly startCol: number;
+  readonly endCol: number;
 }
 
 export const BlobView: FunctionalComponent<BlobViewProps> = ({
@@ -69,6 +81,104 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [BlameComponent, setBlameComponent] = useState<FunctionalComponent<BlameViewProps> | null>(null);
 
+  // In-file search state
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeMatchIndex, setActiveMatchIndex] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Syntax highlighting caching
+  const syntaxCache = useMemo(() => new LineSyntaxCache(), []);
+  const language = useMemo(() => detectLanguage(path), [path]);
+  const lines = useMemo(() => (blob.text ? blob.text.split(/\r?\n/) : []), [blob.text]);
+
+  const highlightedLines = useMemo(() => {
+    if (!blob.text || blob.isBinary || isImage || viewMode !== 'code') return [];
+    return tokenizeFile(blob.text, path, syntaxCache).lines;
+  }, [blob.text, blob.isBinary, isImage, viewMode, path, syntaxCache]);
+
+  // Compute all in-file search matches
+  const allMatches = useMemo<SearchMatchLocation[]>(() => {
+    if (!searchQuery || !blob.text || blob.isBinary || isImage) return [];
+    const queryLower = searchQuery.toLowerCase();
+    const results: SearchMatchLocation[] = [];
+    for (let lIdx = 0; lIdx < lines.length; lIdx++) {
+      const line = lines[lIdx] ?? '';
+      const lineLower = line.toLowerCase();
+      let pos = 0;
+      while (pos < lineLower.length) {
+        const mIdx = lineLower.indexOf(queryLower, pos);
+        if (mIdx === -1) break;
+        results.push({
+          lineIndex: lIdx,
+          startCol: mIdx,
+          endCol: mIdx + queryLower.length,
+        });
+        pos = mIdx + queryLower.length;
+      }
+    }
+    return results;
+  }, [searchQuery, blob.text, blob.isBinary, isImage, lines]);
+
+  const validActiveIndex =
+    allMatches.length > 0
+      ? ((activeMatchIndex % allMatches.length) + allMatches.length) % allMatches.length
+      : 0;
+  const currentMatch = allMatches[validActiveIndex];
+
+  const scrollToMatch = useCallback((match: SearchMatchLocation | undefined) => {
+    if (!match || typeof document === 'undefined') return;
+    const lineEl = document.getElementById(`LC${String(match.lineIndex + 1)}`);
+    lineEl?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, []);
+
+  const handleNextMatch = useCallback(() => {
+    if (allMatches.length === 0) return;
+    const nextIdx = (validActiveIndex + 1) % allMatches.length;
+    setActiveMatchIndex(nextIdx);
+    scrollToMatch(allMatches[nextIdx]);
+  }, [allMatches, validActiveIndex, scrollToMatch]);
+
+  const handlePrevMatch = useCallback(() => {
+    if (allMatches.length === 0) return;
+    const prevIdx = (validActiveIndex - 1 + allMatches.length) % allMatches.length;
+    setActiveMatchIndex(prevIdx);
+    scrollToMatch(allMatches[prevIdx]);
+  }, [allMatches, validActiveIndex, scrollToMatch]);
+
+  const handleCloseSearch = useCallback(() => {
+    setIsSearchOpen(false);
+    setSearchQuery('');
+    setActiveMatchIndex(0);
+  }, []);
+
+  // Keyboard shortcut: Ctrl+F / Cmd+F to find, Esc to close
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        if (!blob.isBinary && !isImage) {
+          e.preventDefault();
+          setIsSearchOpen(true);
+          setTimeout(() => {
+            searchInputRef.current?.focus();
+            searchInputRef.current?.select();
+          }, 50);
+        }
+      } else if (e.key === 'Escape' && isSearchOpen) {
+        e.preventDefault();
+        handleCloseSearch();
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    }
+    return undefined;
+  }, [blob.isBinary, isImage, isSearchOpen, handleCloseSearch]);
+
   // Manage Object URL for image blobs with clean auto-revocation
   useEffect(() => {
     if (isImage && typeof URL !== 'undefined' && typeof Blob !== 'undefined') {
@@ -92,8 +202,9 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
     }
   }, [viewMode, BlameComponent]);
 
-  const lines = blob.text ? blob.text.split(/\r?\n/) : [];
-  const imageSrc = imageUrl ?? (isImage ? `data:${getImageMimeType(path)};base64,${uint8ArrayToBase64(blob.data)}` : undefined);
+  const imageSrc =
+    imageUrl ??
+    (isImage ? `data:${getImageMimeType(path)};base64,${uint8ArrayToBase64(blob.data)}` : undefined);
 
   const updateUrlLineHash = (range: LineRange | null) => {
     if (typeof window === 'undefined') return;
@@ -116,7 +227,10 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
       setAnchorLine(parsed.start);
       onSelectRange?.(parsed);
       requestAnimationFrame(() => {
-        document.getElementById(`L${String(parsed.start)}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        document.getElementById(`L${String(parsed.start)}`)?.scrollIntoView({
+          block: 'center',
+          behavior: 'smooth',
+        });
       });
     }
   });
@@ -134,7 +248,9 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
         await navigator.clipboard.writeText(blob.text);
       }
       setCopiedContent(true);
-      setTimeout(() => { setCopiedContent(false); }, 2000);
+      setTimeout(() => {
+        setCopiedContent(false);
+      }, 2000);
     } catch {
       // Fallback
     }
@@ -151,7 +267,9 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
         await navigator.clipboard.writeText(full);
       }
       setCopiedPermalink(true);
-      setTimeout(() => { setCopiedPermalink(false); }, 2000);
+      setTimeout(() => {
+        setCopiedPermalink(false);
+      }, 2000);
     } catch {
       // Fallback
     }
@@ -187,6 +305,11 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
             {imageDimensions && (
               <span className="badge" style={{ color: 'var(--accent-color)' }}>
                 {imageDimensions.width} × {imageDimensions.height} px
+              </span>
+            )}
+            {!blob.isBinary && !isImage && language !== 'plain' && (
+              <span className="badge" style={{ textTransform: 'uppercase' }}>
+                {language}
               </span>
             )}
             {!blob.isBinary && !isImage && <span className="badge">{lines.length} lines</span>}
@@ -259,6 +382,28 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
               </button>
             )}
 
+            {!blob.isBinary && !isImage && (
+              <button
+                type="button"
+                className={`btn ${isSearchOpen ? 'active' : ''}`}
+                onClick={() => {
+                  setIsSearchOpen((prev) => {
+                    const next = !prev;
+                    if (next) {
+                      setTimeout(() => {
+                        searchInputRef.current?.focus();
+                      }, 50);
+                    }
+                    return next;
+                  });
+                }}
+                title="Find in file (Ctrl+F / ⌘F)"
+                data-testid="find-in-file-btn"
+              >
+                🔍 Find
+              </button>
+            )}
+
             <button
               type="button"
               className="btn raw-download-btn"
@@ -303,6 +448,74 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
             )}
           </div>
         </div>
+
+        {/* In-File Search Bar */}
+        {isSearchOpen && !blob.isBinary && !isImage && (
+          <div className="blob-search-bar" data-testid="blob-search-bar">
+            <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Find:</span>
+            <input
+              ref={searchInputRef}
+              type="text"
+              className="blob-search-input"
+              placeholder="Find in file... (Enter for next)"
+              value={searchQuery}
+              onInput={(e) => {
+                setSearchQuery(e.currentTarget.value);
+                setActiveMatchIndex(0);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (e.shiftKey) {
+                    handlePrevMatch();
+                  } else {
+                    handleNextMatch();
+                  }
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  handleCloseSearch();
+                }
+              }}
+              data-testid="blob-search-input"
+            />
+            <span className="blob-search-counter" data-testid="blob-search-counter">
+              {searchQuery
+                ? allMatches.length > 0
+                  ? `${String(validActiveIndex + 1)} of ${String(allMatches.length)} matches`
+                  : 'No matches'
+                : ''}
+            </span>
+            <button
+              type="button"
+              className="blob-search-nav-btn"
+              onClick={handlePrevMatch}
+              disabled={allMatches.length === 0}
+              title="Previous match (Shift+Enter)"
+              data-testid="blob-search-prev-btn"
+            >
+              ▲
+            </button>
+            <button
+              type="button"
+              className="blob-search-nav-btn"
+              onClick={handleNextMatch}
+              disabled={allMatches.length === 0}
+              title="Next match (Enter)"
+              data-testid="blob-search-next-btn"
+            >
+              ▼
+            </button>
+            <button
+              type="button"
+              className="blob-search-close-btn"
+              onClick={handleCloseSearch}
+              title="Close search (Esc)"
+              data-testid="blob-search-close-btn"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* View Mode Rendering */}
         {isImage && viewMode === 'rendered' && imageSrc ? (
@@ -417,14 +630,58 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
                   selectedRange !== null &&
                   lineNum >= selectedRange.start &&
                   lineNum <= selectedRange.end;
+                const lineTokens = highlightedLines[idx] ?? [{ type: 'plain', text: lineText || ' ' }];
+
+                let renderedContent;
+                if (searchQuery) {
+                  const isLineActiveMatch = currentMatch?.lineIndex === idx;
+                  const segments = sliceTokensForSearch(
+                    lineTokens,
+                    searchQuery,
+                    isLineActiveMatch,
+                    isLineActiveMatch ? currentMatch.startCol : undefined
+                  );
+                  renderedContent =
+                    segments.length > 0 ? (
+                      segments.map((seg, sIdx) =>
+                        seg.isSearchMatch ? (
+                          <mark
+                            key={sIdx}
+                            className={`syn-search-match ${seg.isCurrentMatch ? 'syn-search-active' : ''} syn-${seg.type}`}
+                          >
+                            {seg.text}
+                          </mark>
+                        ) : (
+                          <span key={sIdx} className={`syn-${seg.type}`}>
+                            {seg.text}
+                          </span>
+                        )
+                      )
+                    ) : (
+                      ' '
+                    );
+                } else {
+                  renderedContent =
+                    lineTokens.length > 0 ? (
+                      lineTokens.map((token, tIdx) => (
+                        <span key={tIdx} className={`syn-${token.type}`}>
+                          {token.text}
+                        </span>
+                      ))
+                    ) : (
+                      ' '
+                    );
+                }
+
                 return (
                   <div
                     key={lineNum}
                     id={`LC${String(lineNum)}`}
                     data-line-number={lineNum}
                     className={`code-line ${isSel ? 'highlighted line-highlight line-selected' : ''}`}
+                    data-line-text={lineText}
                   >
-                    {lineText || ' '}
+                    {renderedContent}
                   </div>
                 );
               })}

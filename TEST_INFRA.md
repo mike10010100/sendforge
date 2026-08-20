@@ -1,8 +1,8 @@
-# Sendforge Multi-Tier E2E Testing Infrastructure
+# Sendforge Multi-Tier E2E Testing Infrastructure (Phase 4)
 
 ## 1. Overview & Architecture
 
-The Sendforge Phase 3 End-to-End (E2E) Test Suite is an opaque-box, multi-tier testing framework engineered to validate all features of the static Git forge server and in-browser client. It tests the complete integrated stack—including Rust static file/loose object serving, Git hooks, metadata generation, client-side Loose Object DAG traversal, in-browser Lowest Common Ancestor (LCA) merge-base calculation, Web Worker 3-way Myers diffing, Git-native Pull Requests and Issues discovery, review notes integration, and zero-JS static HTML fallback pre-rendering—against native Git reference implementations.
+The Sendforge Phase 4 End-to-End (E2E) Test Suite is an opaque-box, multi-tier testing framework engineered to validate all features of the static Git forge server and in-browser client. It tests the complete integrated stack—including HTTP RFC 7233 Byte-Range Packfile (`.pack` / `.idx` v2) reading, OFS/REF delta reconstruction, 50+ language zero-dependency syntax tokenization, search match highlighting, interactive Issue and Pull Request creation modals, `git push` command generation, and standard RFC 2822 `git format-patch` export compatible with `git am`—against native Git reference implementations.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -16,7 +16,7 @@ The Sendforge Phase 3 End-to-End (E2E) Test Suite is an opaque-box, multi-tier t
 │ Multi-Tier Test Suites (`e2e/tier*`)                                   │
 │ ┌─────────────────┐ ┌─────────────────┐ ┌──────────────┐ ┌───────────┐ │
 │ │ Tier 1: Feature │ │ Tier 2: Boundary│ │ Tier 3: Cross│ │ Tier 4:   │ │
-│ │ Coverage (F1-25)│ │ & Corner (B1-20)│ │ Workflow (C12│ │ Workloads │ │
+│ │ Coverage (F1-32)│ │ & Corner (B1-27)│ │ Workflow(C17)│ │ Workloads │ │
 │ └─────────────────┘ └─────────────────┘ └──────────────┘ └───────────┘ │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ Employs
@@ -28,205 +28,247 @@ The Sendforge Phase 3 End-to-End (E2E) Test Suite is an opaque-box, multi-tier t
 │ ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────────────┐ │
 │ │GitParser (Loose) │ │DagHelper (LCA)   │ │BlameHelper (Provenance)  │ │
 │ └──────────────────┘ └──────────────────┘ └──────────────────────────┘ │
+│ ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────────────┐ │
+│ │ArchiveValidator  │ │HtmlValidator     │ │PackHelper (Idx/Delta)    │ │
+│ └──────────────────┘ └──────────────────┘ └──────────────────────────┘ │
 │ ┌──────────────────┐ ┌──────────────────┐                              │
-│ │ArchiveValidator  │ │HtmlValidator     │                              │
+│ │SyntaxValidator   │ │CollabModalHelper │                              │
 │ └──────────────────┘ └──────────────────┘                              │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 2. Feature Inventory (F01–F24)
+## 2. Comprehensive Feature Inventory (F01–F32)
 
 | # | Feature | Description | Milestone | Suite Path | Status |
 |---|---------|-------------|-----------|------------|--------|
-| 1 | F01: Git Collaboration Ref Discovery | Discover `refs/pull/<id>/head`, `refs/pull/<id>/meta`, `refs/issues/<id>`, `refs/notes/reviews` | M1 | `e2e/tier1_features/f21_collab_export.js` | VERIFIED |
-| 2 | F02: Collaboration Data Subsystem | Rust parser subsystem in `src/collab/` for PRs, Issues, Notes with JSON schema and Git commit fallback | M1 | `e2e/tier1_features/f21_collab_export.js` | VERIFIED |
-| 3 | F03: Metadata & Stats Count Extension | Extend `RepoStats` and `meta.json` with `issue_count`, `open_issue_count`, `pull_count`, `open_pull_count` | M1 | `e2e/tier1_features/f21_collab_export.js` | VERIFIED |
-| 4 | F04: JSON Exporter Serialization | Serialize `static/pulls.json` and `static/issues.json` during export and hook runs | M1 | `e2e/tier1_features/f21_collab_export.js` | VERIFIED |
-| 5 | F05: Static Zero-JS HTML Fallback | Pre-render `static/pulls.html`, `static/issues.html`, detail views with sanitized Markdown and 4-tab nav | M1 | `e2e/tier1_features/f21_collab_export.js` | VERIFIED |
-| 6 | F06: Strict Rust Safety & Quality | `#![forbid(unsafe_code)]`, zero unwrap/expect/panic, strict Clippy deny list, clock-warp safe timestamps | M1 | Cargo Gates | VERIFIED |
-| 7 | F07: In-Browser DAG LCA Merge-Base | Client-side DAG traversal (`dag.ts`) to compute Lowest Common Ancestor (merge base) between PR head & target branch | M2 | `e2e/tier1_features/f22_merge_base.js` | VERIFIED |
-| 8 | F08: PR Commit Range Resolution | Traverse and collect all commits in `mergeBase..head` for PR commit list | M2 | `e2e/tier1_features/f22_merge_base.js` | VERIFIED |
-| 9 | F09: Off-Thread Web Worker 3-Way Diff | Offload tree diffing and Myers hunk diffing to Web Worker without blocking UI | M2 | `e2e/tier1_features/f23_pr_viewer.js` | VERIFIED |
-| 10 | F10: Review Notes Inline Integration | Load and attach `refs/notes/reviews` comments to diff hunks, files, or commit SHAs | M2 | `e2e/tier1_features/f23_pr_viewer.js` | VERIFIED |
-| 11 | F11: Interactive PR List View | `PullRequestsView.tsx` with open/merged/closed status filters, author filter, label badges, instant search | M3 | `e2e/tier1_features/f23_pr_viewer.js` | VERIFIED |
-| 12 | F12: PR Detail Header & Meta | `PRDetailView.tsx` header with status badge, author metadata, timestamps, branch pills | M3 | `e2e/tier1_features/f23_pr_viewer.js` | VERIFIED |
-| 13 | F13: PR Detail Conversation Tab | Render PR description with markdown, chronological timeline of comments and commits | M3 | `e2e/tier1_features/f23_pr_viewer.js` | VERIFIED |
-| 14 | F14: PR Detail Commits Tab | Render list of commits in PR with author/date info and diff navigation links | M3 | `e2e/tier1_features/f23_pr_viewer.js` | VERIFIED |
-| 15 | F15: PR Detail Files Changed Tab | Interactive Unified & Split diff views with file selector, additions/deletions stats, inline review notes | M3 | `e2e/tier1_features/f23_pr_viewer.js` | VERIFIED |
-| 16 | F16: Interactive Issue List View | `IssuesView.tsx` with open/closed status filters, author filter, label badges, instant search | M3 | `e2e/tier1_features/f24_issues_tracker.js` | VERIFIED |
-| 17 | F17: Issue Detail View Header & Meta | `IssueDetailView.tsx` header with status badge, author metadata, timestamps, label chips | M3 | `e2e/tier1_features/f24_issues_tracker.js` | VERIFIED |
-| 18 | F18: Issue Detail Discussion Tab | Render Markdown-rendered issue description and chronological comment timeline | M3 | `e2e/tier1_features/f24_issues_tracker.js` | VERIFIED |
-| 19 | F19: Integrated 4-Tab Top Navbar | Update top navbar in `App.tsx` to `Code`, `Commits <count>`, `Issues <count>`, `Pull Requests <count>` with active states | M3 | `e2e/tier1_features/f25_nav_routing.js` | VERIFIED |
-| 20 | F20: Deep-Link Hash Routing | Robust hash router in `router.ts` for `#/issues`, `#/issues/<id>`, `#/pulls`, `#/pulls/<id>`, `#/pulls/<id>/files`, `#/pulls/<id>/commits` | M3 | `e2e/tier1_features/f25_nav_routing.js` | VERIFIED |
-| 21 | F21: Strict TypeScript Zero-Any Safety | `strict: true`, `@typescript-eslint/strict-type-checked`, zero `any`, strict null checks | M2, M3 | Compiler Gates | VERIFIED |
-| 22 | F22: Vitest Comprehensive Unit Tests | Unit test suites for DAG LCA, 3-way diff, collab client, router, PR views, and Issue views | M2, M3 | `npm test` | VERIFIED |
-| 23 | F23: Multi-Tier E2E Test Suite | 4-tier opaque-box E2E test suite (Tiers 1-4) covering full collaboration lifecycle | M4 | `e2e/runner.js` | VERIFIED |
-| 24 | F24: Adversarial Coverage Hardening | White-box stress testing of complex DAGs, large diffs, malformed refs, zero-JS fallbacks | M4 | `e2e/tier2_boundaries/` | VERIFIED |
+| 1 | F01: Bare Repository Initialization | Bare repository structure and default branch config | M1 | `e2e/tier1_features/f01_bare_repo_init.js` | VERIFIED |
+| 2 | F02: Post-Receive Hook Script | Incremental metadata update on git push | M1 | `e2e/tier1_features/f02_post_receive_hook.js` | VERIFIED |
+| 3 | F03: Dumb HTTP Info/Refs | `info/refs` and `objects/info/packs` generation | M1 | `e2e/tier1_features/f03_dumb_http_info.js` | VERIFIED |
+| 4 | F04: Meta JSON Generator | Repository stats, branch/tag counts, readme flags | M1 | `e2e/tier1_features/f04_meta_json_generator.js` | VERIFIED |
+| 5 | F05: Static HTML Fallback | Zero-JS root directory tree and sanitized CommonMark | M1 | `e2e/tier1_features/f05_static_html_fallback.js` | VERIFIED |
+| 6 | F06: Static Commit Log View | Pre-rendered commit list with author, date, and commit link | M1 | `e2e/tier1_features/f06_static_commit_log.js` | VERIFIED |
+| 7 | F07: CommonMark README Parser | Pre-render markdown README with headings, lists, tables | M1 | `e2e/tier1_features/f07_commonmark_readme.js` | VERIFIED |
+| 8 | F08: Zlib Decompression | Inflate raw Git loose objects and verify SHA-1 | M1 | `e2e/tier1_features/f08_zlib_decompression.js` | VERIFIED |
+| 9 | F09: Binary Tree Parser | Parse Git binary tree objects and decode file modes/paths | M1 | `e2e/tier1_features/f09_binary_tree_parser.js` | VERIFIED |
+| 10 | F10: Text Commit/Tag Parser | Parse author, committer, GPG signatures, annotated tags | M1 | `e2e/tier1_features/f10_text_commit_tag_parser.js` | VERIFIED |
+| 11 | F11: Blob Reader & MIME Detection | Binary vs text detection and UTF-8 decode | M1 | `e2e/tier1_features/f11_blob_reader_detection.js` | VERIFIED |
+| 12 | F12: Caching Ref Resolver | In-memory ref cache and packed-refs fallback | M1 | `e2e/tier1_features/f12_caching_ref_resolver.js` | VERIFIED |
+| 13 | F13: Web Worker Myers Diffing | Offload tree diffing and Myers hunk generation | M1 | `e2e/tier1_features/f13_worker_diffing.js` | VERIFIED |
+| 14 | F14: Reactive UI Navigation | Client SPA state navigation and URL synchronization | M1 | `e2e/tier1_features/f14_reactive_ui_navigation.js` | VERIFIED |
+| 15 | F15: Static HTTP Server Daemon | Static file server with RFC 7233 byte-range support | M1 | `e2e/tier1_features/f15_static_http_server.js` | VERIFIED |
+| 16 | F16: Standalone Static Exporter | Self-contained static site directory exporter | M1 | `e2e/tier1_features/f16_static_exporter.js` | VERIFIED |
+| 17 | F17: Tabbed Ref Selector | Dedicated branches/tags tabs, fuzzy filter, badges | Phase 2 | `e2e/tier1_features/f17_tabbed_ref_selector.js` | VERIFIED |
+| 18 | F18: In-Browser git blame | Reverse DAG line provenance attribution | Phase 2 | `e2e/tier1_features/f18_in_browser_git_blame.js` | VERIFIED |
+| 19 | F19: File Permalinks & Line Highlights | `#L42` and `#L10-L25` selection and immutable links | Phase 2 | `e2e/tier1_features/f19_file_permalinks_highlighting.js` | VERIFIED |
+| 20 | F20: Snapshot Archive Generation | In-browser PKWARE ZIP and POSIX ustar `.tar.gz` | Phase 2 | `e2e/tier1_features/f20_raw_blob_snapshot_archives.js` | VERIFIED |
+| 21 | F21: Collaboration Ref Discovery | Export `refs/pull/*`, `refs/issues/*`, `refs/notes/*` | Phase 3 | `e2e/tier1_features/f21_collab_export.js` | VERIFIED |
+| 22 | F22: In-Browser DAG Merge-Base (LCA) | Lowest Common Ancestor DAG calculation | Phase 3 | `e2e/tier1_features/f22_merge_base.js` | VERIFIED |
+| 23 | F23: Interactive Pull Request Viewer | PR list, conversation tab, commits, 3-way diff | Phase 3 | `e2e/tier1_features/f23_pr_viewer.js` | VERIFIED |
+| 24 | F24: Interactive Issue Tracker | Issue list, labels, conversation timeline | Phase 3 | `e2e/tier1_features/f24_issues_tracker.js` | VERIFIED |
+| 25 | F25: 4-Tab Top Navbar & Hash Router | Code, Commits, Issues, Pull Requests navigation | Phase 3 | `e2e/tier1_features/f25_nav_routing.js` | VERIFIED |
+| 26 | F26: Git .idx v2 Binary Parser | Fanout binary search, 20-byte SHA-1 table, CRC32, 4/8-byte offsets | Phase 4 | `e2e/tier1_features/f26_pack_idx_v2.js` | VERIFIED |
+| 27 | F27: Byte-Range Packfile Fetcher | RFC 7233 range requests, object header decoding, inflate | Phase 4 | `e2e/tier1_features/f27_pack_byte_range.js` | VERIFIED |
+| 28 | F28: OFS/REF Delta Decompression | Variable negative offsets, REF SHA-1, opcode COPY/INSERT | Phase 4 | `e2e/tier1_features/f28_delta_decompression.js` | VERIFIED |
+| 29 | F29: 50+ Language Syntax Highlighter | Zero-dependency lexical tokenizer, multi-line state, WCAG AA colors | Phase 4 | `e2e/tier1_features/f29_syntax_highlighting.js` | VERIFIED |
+| 30 | F30: In-File Search Highlight Overlay | Search highlight overlay with token span preservation & HTML escape | Phase 4 | `e2e/tier1_features/f30_search_highlighting.js` | VERIFIED |
+| 31 | F31: Interactive Issue Modal & Export | Issue modal, git push ref generator, JSON download, drafts | Phase 4 | `e2e/tier1_features/f31_issue_modal_generator.js` | VERIFIED |
+| 32 | F32: PR Modal & git format-patch | Branch selector, merge-base diff, git format-patch, git am verify | Phase 4 | `e2e/tier1_features/f32_pr_modal_format_patch.js` | VERIFIED |
 
 ---
 
 ## 3. The 4-Tier Testing Methodology
 
-The test suite is structured into 4 distinct verification tiers, ensuring total coverage from atomic feature behaviors to high-concurrency real-world workloads.
+The Sendforge E2E test suite adheres to a strict 4-Tier verification hierarchy:
 
-### Tier 1: Feature Coverage (>=5 Tests per Feature)
+### Tier 1: Category-Partition Feature Coverage (>=5 Tests per Feature)
+Validates individual functional requirements in strict isolation against documented specifications and interface contracts. Every feature in the inventory (F01–F32) has at least 5 independent, automated test cases.
 
-Tier 1 validates individual functional requirements against documented specifications. Each Phase 3 requirement (R1, R2, R3, R4, R5) has dedicated test suites with at least 5 comprehensive test cases:
+#### Phase 4 Feature Suites:
+- **Feature 26: Git `.idx` v2 Index Parser (`tier1_features/f26_pack_idx_v2.js`)** — 6 tests:
+  - `T1.26.1`: Header verification (magic `\xFFtOc` and version 2), rejecting invalid headers/versions.
+  - `T1.26.2`: 256-entry first-level fanout table parsing and $O(\log N)$ binary search lookup.
+  - `T1.26.3`: 20-byte SHA-1 table lookup returning accurate object index for all objects in index.
+  - `T1.26.4`: CRC32 checksum retrieval for packed objects matching computed IEEE 802.3 CRC32.
+  - `T1.26.5`: 4-byte offset table resolution for standard offsets (< 2GB) and offset ordering.
+  - `T1.26.6`: Byte span calculation `getByteSpan(shaHex, packFileSize)` for consecutive packed objects.
 
-#### R1: Git Collaboration Ref Discovery & Serialization (`tier1_features/f21_collab_export.js`)
-- **T1.21.1 (PR Ref Discovery & Serialization)**: `sendforge export` discovers `refs/pull/*/head` and `refs/pull/*/meta` and serializes `pulls.json`.
-- **T1.21.2 (Issue Ref Discovery & Serialization)**: `sendforge export` discovers `refs/issues/*` and serializes `issues.json`.
-- **T1.21.3 (Metadata Stats Counter Extension)**: `meta.json` updated with accurate `issue_count`, `open_issue_count`, `pull_count`, and `open_pull_count`.
-- **T1.21.4 (Pre-rendered Static HTML Fallbacks)**: `sendforge export` generates accessible zero-JS static HTML fallback views `pulls.html` and `issues.html`.
-- **T1.21.5 (Post-Receive Hook Incremental Update)**: `sendforge hook` incrementally regenerates collaboration JSON files upon receiving ref updates via standard input.
-- **T1.21.6 (Markdown Sanitization in HTML Fallbacks)**: Safe CommonMark rendering prevents script injection and unescaped HTML vulnerabilities.
+- **Feature 27: Byte-Range Packfile Fetching (`tier1_features/f27_pack_byte_range.js`)** — 6 tests:
+  - `T1.27.1`: Byte-range HTTP RFC 7233 request fetches only target object slice from packfile.
+  - `T1.27.2`: Variable-length object header decoding for standard object types (commit, tree, blob, tag).
+  - `T1.27.3`: Object payload zlib decompression and uncompressed size validation.
+  - `T1.27.4`: Direct retrieval of packed blobs, trees, and commits matching native Git objects.
+  - `T1.27.5`: Fallback hierarchy in fetcher: Memory cache -> Loose object -> Packfile range -> 404 error.
+  - `T1.27.6`: Discovery of packfiles via `objects/info/packs` and `.git/objects/pack/*.idx`.
 
-#### R2: In-Browser DAG Merge-Base & LCA Engine (`tier1_features/f22_merge_base.js`)
-- **T1.22.1 (Simple Fork LCA Resolution)**: Resolves branching base commit as Lowest Common Ancestor matching native `git merge-base`.
-- **T1.22.2 (Divergent Branches LCA)**: Resolves common ancestor across multi-commit divergence on both target and feature branches.
-- **T1.22.3 (Fast-Forward LCA Resolution)**: Resolves target branch tip as LCA for fast-forward branches.
-- **T1.22.4 (Criss-Cross Merge Resolution)**: Accurately navigates complex multi-parent criss-cross merges to find topological LCA.
-- **T1.22.5 (Disconnected Orphan Branches)**: Returns `null` merge base when branches share zero common history.
-- **T1.22.6 (Commit History Range `mergeBase..head`)**: Collects all PR commits in reverse chronological order while strictly excluding target branch commits.
+- **Feature 28: OFS/REF Delta Decompression (`tier1_features/f28_delta_decompression.js`)** — 6 tests:
+  - `T1.28.1`: `OBJ_OFS_DELTA` negative relative offset decoding and base object resolution.
+  - `T1.28.2`: `OBJ_REF_DELTA` 20-byte base object SHA-1 lookup and base object resolution.
+  - `T1.28.3`: Delta opcode COPY instruction interpreter (bitmask offsets/lengths, 65536 zero size default).
+  - `T1.28.4`: Delta opcode INSERT instruction interpreter (literal byte insertions).
+  - `T1.28.5`: Multi-level delta chain resolution (chains of length 2, 3, 5).
+  - `T1.28.6`: LRU delta base caching for accelerating repetitive delta lookups.
 
-#### R3: Interactive Pull Request Viewer (`tier1_features/f23_pr_viewer.js`)
-- **T1.23.1 (PR List View Status & Author Filter)**: Instant client-side filtering by status (`open`, `merged`, `closed`) and author query.
-- **T1.23.2 (PR Detail Header & Metadata)**: Renders status badge, branch pills (`feature` -> `main`), author metadata, and timestamps.
-- **T1.23.3 (Conversation Tab & Timeline)**: Markdown-rendered description and chronological discussion comments timeline.
-- **T1.23.4 (Commits Tab & Commit List)**: Displays list of commits included in the PR branch with short SHAs and commit summaries.
-- **T1.23.5 (Files Changed 3-Way Diff)**: Computes 3-way tree diff between merge base and PR head, providing unified/split diffs and addition/deletion counts.
-- **T1.23.6 (Inline Review Notes Integration)**: Loads and binds review comments from `refs/notes/reviews` to specific files, diff hunks, or commits.
+- **Feature 29: Modular Syntax Highlighting Engine (`tier1_features/f29_syntax_highlighting.js`)** — 7 tests:
+  - `T1.29.1`: Deterministic language detection by file path/extension across 50+ languages.
+  - `T1.29.2`: Lexical tokenization of keywords, types, strings, comments, numbers, operators, punctuation.
+  - `T1.29.3`: Multi-line state machine for block comments (`/* ... */`) across line boundaries.
+  - `T1.29.4`: Multi-line state machine for docstrings (`""" ... """`) and template literals (`` `...` ``).
+  - `T1.29.5`: Line-by-line syntax caching (`LineSyntaxCache`) and cache invalidation.
+  - `T1.29.6`: WCAG 2.1 AA/AAA dark theme contrast ratio compliance (> 4.5:1 against `#0d1117`).
+  - `T1.29.7`: HTML rendering of tokenized lines preserving exact whitespace and indentation.
 
-#### R4: Interactive Issue Tracker (`tier1_features/f24_issues_tracker.js`)
-- **T1.24.1 (Issue List View Status & Author Search)**: Instant client-side filtering by status (`open`, `closed`) and author search query.
-- **T1.24.2 (Label Chip Filtering)**: Color-coded badge rendering and multi-label filtering logic.
-- **T1.24.3 (Issue Detail Header & Metadata)**: Displays status badge, author metadata, and creation timestamps.
-- **T1.24.4 (Markdown Body Description)**: Renders CommonMark markdown with headings, code blocks, lists, and links.
-- **T1.24.5 (Chronological Comments Timeline)**: Displays discussion comments in chronological order with author details.
-- **T1.24.6 (Empty State & Search Fallbacks)**: Clean placeholder display when issue list is empty or matches no filters.
+- **Feature 30: In-File Search Highlight Overlay (`tier1_features/f30_search_highlighting.js`)** — 6 tests:
+  - `T1.30.1`: Overlays `<mark class="search-match">` on matching tokens while preserving token syntax spans.
+  - `T1.30.2`: Case-insensitive search query matching.
+  - `T1.30.3`: Multiple search matches within a single line and within a single token.
+  - `T1.30.4`: Search matches spanning across adjacent token boundaries.
+  - `T1.30.5`: HTML entity escaping (`<`, `>`, `&`, `"`, `'`) inside match highlights and surrounding text.
+  - `T1.30.6`: Empty or whitespace-only search query returns un-highlighted syntax HTML.
 
-#### R5: Integrated 4-Tab Navigation & Deep-Link Routing (`tier1_features/f25_nav_routing.js`)
-- **T1.25.1 (4-Tab Top Navbar)**: Renders `[ Code ]`, `[ Commits <count> ]`, `[ Issues <count> ]`, `[ Pull Requests <count> ]` with active states.
-- **T1.25.2 (Dynamic Count Badges)**: Reflects total and open counts from `meta.json` in top navigation bar badges.
-- **T1.25.3 (Issue Route Deep Linking)**: Hash deep linking support for `#/issues` and `#/issues/<id>`.
-- **T1.25.4 (PR Route Deep Linking)**: Hash deep linking support for `#/pulls`, `#/pulls/<id>`, `#/pulls/<id>/files`, and `#/pulls/<id>/commits`.
-- **T1.25.5 (Route AST Formatter)**: Formats and parses bidirectional route objects to/from URL hash strings.
-- **T1.25.6 (Unrecognized Route Fallbacks)**: Malformed or invalid hash routes safely default to root Code view (`#/`).
+- **Feature 31: Interactive Issue Modal & Export (`tier1_features/f31_issue_modal_generator.js`)** — 6 tests:
+  - `T1.31.1`: Modal UI state: title input, markdown description editor with live preview, label chips, author.
+  - `T1.31.2`: Push command generation: `git push origin HEAD:refs/issues/<id>` with one-click copy format.
+  - `T1.31.3`: JSON export generation: valid JSON payload with title, description, author, labels, timestamp.
+  - `T1.31.4`: LocalStorage draft auto-saving and recovery per repository (`sendforge_draft_issue_<repo>`).
+  - `T1.31.5`: Draft discard/clearing upon successful issue creation.
+  - `T1.31.6`: Modal validation and submit button enabling only with non-empty title.
 
----
-
-### Tier 2: Boundary & Corner Cases
-
-Tier 2 exposes the collaboration and DAG subsystem to edge cases, malformed inputs, and pathological Git data structures:
-
-- **B01-B16 (Foundational Boundaries)**: Empty repos, 55-level deep nesting, unicode/emoji filenames, 10MB large blobs, binary files, corrupted zlib/SHA-1 objects, clock-warp timestamps, forced pushes, and octopus merges.
-- **B17 (Empty Collaboration States)**: Zero PRs and Zero Issues produce valid empty JSON arrays `[]` and 0 counts in `meta.json`; pre-rendered fallback pages handle zero states gracefully; PRs/Issues with empty comments or labels arrays render cleanly.
-- **B18 (Pathological DAG Topologies)**: Criss-cross merges with multiple candidate ancestors, deep 100+ commit linear chains computed in <50ms without stack overflow, disconnected orphan roots return null, and octopus merge commits traversed without cycle lockup.
-- **B19 (Large Diffs & Complex File Operations)**: PRs with 55+ modified files, large text diffs (>1,000 lines), binary image assets marked as non-text, executable file mode changes (`0644` to `0755`), and zero-change PRs.
-- **B20 (Malformed Metadata & Broken References)**: Non-JSON / corrupt metadata blobs handled safely without crash, missing head commit references handled gracefully, non-numeric ref IDs parsed safely, and missing target branch refs handled without panic.
-
----
-
-### Tier 3: Cross-Feature Combinations
-
-Tier 3 verifies integrated user journeys and feature interactions:
-
-- **C01-C08 (Foundational Combinations)**: Full lifecycle pipeline, multi-branch/tag diffing workflows, static export offline hosting, mixed binary/text assets, and error recovery from corrupt objects.
-- **C09 (Full Pull Request End-to-End Lifecycle)**: Branch creation -> commit changes -> push `refs/pull/1/head` & meta -> trigger `sendforge hook` -> fetch `pulls.json` -> compute merge-base -> verify commits list -> render 3-way files changed diff -> attach review notes.
-- **C10 (Issue Creation, Multi-Label Filtering & Timeline Flow)**: Multi-issue creation -> export site -> filter by label & status -> inspect discussion timeline with multiple comments -> close issue and verify counter decrements.
-- **C11 (Deep-Link Hash Navigation Across All Tabs)**: Direct URL deep-link to `#/pulls/1/files` loads PR files changed tab with diff; switching tabs updates URL hash to `#/pulls/1/commits` and `#/pulls/1`; jumping to `#/issues/2` transitions view cleanly.
-- **C12 (Static HTML Fallback Parity with Client SPA)**: Pre-rendered zero-JS static HTML fallback `pulls.html` and `issues.html` match the client-side SPA rendered data byte-for-byte in title, author, and comments.
+- **Feature 32: PR Modal & git format-patch Export (`tier1_features/f32_pr_modal_format_patch.js`)** — 6 tests:
+  - `T1.32.1`: Modal UI state: target vs source branch selector with merge-base calculation.
+  - `T1.32.2`: Live 3-way tree and file diff preview between target branch and source branch.
+  - `T1.32.3`: Push command generation: `git push origin <branch>:refs/pull/<id>/head`.
+  - `T1.32.4`: RFC 2822 standard `git format-patch` export (`From <hash>`, `From:`, `Date:`, `Subject: [PATCH]`, `---`, diffstat, diff hunks).
+  - `T1.32.5`: Native `git am` ingestion test verifying exported patch applies cleanly to Git repository.
+  - `T1.32.6`: LocalStorage draft auto-saving and recovery for PR state.
 
 ---
 
-### Tier 4: Real-World Application Workloads
+### Tier 2: Boundary Value Analysis & Corner Cases (>=5 Tests per Boundary)
+Exhaustively stresses boundary conditions, degenerate states, pathological inputs, and extreme limits.
 
-Tier 4 tests complete, production-grade workloads against native Git:
+#### Phase 4 Boundary Suites:
+- **Boundary 21: Deep Delta Chains & Cycle Detection (`tier2_boundaries/b21_deep_delta_chains.js`)** — 5 tests:
+  - `B21.1`: Deep delta chain (depth 10) resolves accurately to original uncompressed base.
+  - `B21.2`: Deep delta chain (depth 25) resolves within performance threshold without stack overflow.
+  - `B21.3`: Circular delta reference detection (A -> B -> A) safely detected and rejected.
+  - `B21.4`: Self-referential delta (A -> A) detected and rejected.
+  - `B21.5`: Missing delta base object SHA-1 gracefully surfaces typed error.
 
-- **W01-W07 (Foundational Workloads)**: Multi-author 50-commit repo simulation, 1000-request high concurrency scraper flood, native Git dumb HTTP interop, and dynamic browser navigation.
-- **W08 (Multi-Repository Collaboration Simulation)**: Multi-repo simulation with 10+ PRs, 20+ issues, and multiple branches and review notes per repository, maintaining strict ref isolation.
-- **W09 (High-Concurrency Collab Scraper Flood)**: 200 concurrent requests targeting `/pulls.json`, `/issues.json`, `/pulls.html`, `/issues.html`, and `/meta.json` with 0 server drops and sub-25ms median latency.
-- **W10 (Native Git Dumb HTTP Collaboration Interop)**: Native `git` CLI clones and fetches `refs/pull/*` and `refs/notes/reviews` over HTTP from Sendforge static server.
-- **W11 (1,000-Commit Complex DAG Merge-Base Stress Test)**: Large-scale Git DAG traversal with 100+ commit chain and divergent branch forks, verifying 100% agreement against native `git merge-base`.
+- **Boundary 22: Packfiles > 2GB & 8-Byte Offsets (`tier2_boundaries/b22_packfile_large_offsets.js`)** — 5 tests:
+  - `B22.1`: 8-byte secondary offset table indexing when MSB bit (0x80000000) is set in 4-byte offset table.
+  - `B22.2`: Offset at exact 2 GiB boundary (0x80000000) correctly resolved via 8-byte table.
+  - `B22.3`: Large 64-bit offsets (5 GiB, 10 GiB) encoded and decoded without precision loss.
+  - `B22.4`: Out-of-bounds 8-byte table index triggers structured error.
+  - `B22.5`: Sorted offset list properly handles mix of 4-byte and 8-byte offsets.
+
+- **Boundary 23: Empty & Single-Byte Blobs in Packfiles (`tier2_boundaries/b23_empty_and_single_byte_blobs.js`)** — 5 tests:
+  - `B23.1`: Packed empty file (0-byte blob) decoded with size=0 and empty payload.
+  - `B23.2`: Packed 1-byte blob decoded with size=1 and accurate byte value.
+  - `B23.3`: Delta between 0-byte base and non-empty target (pure INSERT opcode).
+  - `B23.4`: Delta between non-empty base and 0-byte target (0-byte output).
+  - `B23.5`: Delta reconstruction for large COPY with zero literal inserts.
+
+- **Boundary 24: Syntax Corner Cases & Exotic Inputs (`tier2_boundaries/b24_syntax_corner_cases.js`)** — 5 tests:
+  - `B24.1`: Unknown file extension or extensionless file defaults safely to plain text.
+  - `B24.2`: Unclosed block comment (`/*` with no `*/`) tokenized gracefully to end of file.
+  - `B24.3`: Unclosed string literal (`"hello...` with no closing quote) tokenized safely.
+  - `B24.4`: Mixed line endings (`\r\n`, `\n`, `\r`) tokenized without extra blank tokens.
+  - `B24.5`: Extremely long single line (10,000+ characters) tokenized without crash or lag.
+
+- **Boundary 25: Malformed Pack Deltas & Corruptions (`tier2_boundaries/b25_corrupted_pack_deltas.js`)** — 5 tests:
+  - `B25.1`: Reserved opcode 0x00 in delta stream throws error.
+  - `B25.2`: COPY opcode specifying offset beyond base object length throws OutOfBoundsCopy error.
+  - `B25.3`: Truncated delta payload (stream ends before instructed insert bytes) throws error.
+  - `B25.4`: Corrupted zlib stream in packfile object throws DecompressionFailed error.
+  - `B25.5`: CRC32 checksum mismatch in `.idx` detected and flagged.
+
+- **Boundary 26: Search Highlighting Boundaries (`tier2_boundaries/b26_search_highlight_boundaries.js`)** — 5 tests:
+  - `B26.1`: Empty search query `""` returns original tokens without modification.
+  - `B26.2`: Search query containing regex special characters (`.*+?^${}()|[]\`) treated as literal text.
+  - `B26.3`: Search query containing HTML characters (`<script>`, `&amp;`, `"test"`) safely escaped in output.
+  - `B26.4`: Search query longer than line length returns unmodified tokens.
+  - `B26.5`: Unicode emoji and non-ASCII search queries (`🎉`, `日本語`) matched accurately.
+
+- **Boundary 27: Collaboration Modal Boundary Cases (`tier2_boundaries/b27_collab_modal_boundaries.js`)** — 5 tests:
+  - `B27.1`: Branch names with slashes and special characters safely formatted in push commands.
+  - `B27.2`: Large PR diff (100+ files) formatted into patch without truncation.
+  - `B27.3`: PR with zero commits between branches (identical SHA) disables format-patch export.
+  - `B27.4`: LocalStorage quota exceedance handled gracefully without crashing modal UI.
+  - `B27.5`: Commit messages with multi-paragraph bodies and markdown preserved in format-patch.
 
 ---
 
-## 4. Authoritative Test Oracles & Output Derivation
+### Tier 3: Cross-Feature Integration / Pairwise Combinations
+Validates seamless interaction between disparate subsystems.
 
-For every test case, expected outputs are derived from authoritative, deterministic sources:
+#### Phase 4 Combination Suites:
+- **Combination 13: Packfile Fetching + Syntax Highlighting (`tier3_combinations/c13_pack_fetch_syntax_highlight.js`)** — 2 tests:
+  - `C13.1`: Fetch packed multi-language source files via byte-range and render through syntax engine.
+  - `C13.2`: Render TypeScript React component from packed object with syntax tokens.
 
-1. **Native Git Reference Engine (Oracle)**:
-   - `git merge-base <commitA> <commitB>` provides authoritative Lowest Common Ancestor SHAs.
-   - `git rev-list <base>..<head>` provides authoritative commit history ranges.
-   - `git diff-tree -r <treeA> <treeB>` provides authoritative 3-way file change lists and addition/deletion line counts.
-   - `git clone <http-url>` / `git fetch <http-url>` validates standard Git dumb HTTP protocol compliance.
+- **Combination 14: PR Diff on Packed Commits (`tier3_combinations/c14_pr_diff_packed_commits.js`)** — 2 tests:
+  - `C14.1`: Compute merge-base and 3-way tree diff between branches residing in `.pack` files.
+  - `C14.2`: Generate live diffstat summary for packed branch comparison.
 
-2. **Interface Specifications & Schemas**:
-   - JSON schemas for `pulls.json`, `issues.json`, and `meta.json` defined in `PROJECT.md § Interface Contracts`.
-   - Hash routing AST grammar defined in `PROJECT.md § Hash Router AST Contract`.
-   - CommonMark Markdown rendering specification for pre-rendered fallback views.
+- **Combination 15: Issue Modal & Packed Repo Integration (`tier3_combinations/c15_issue_modal_packed_repo.js`)** — 2 tests:
+  - `C15.1`: Create issue in packed repository, verify generated `refs/issues/<id>` push command and JSON download.
+  - `C15.2`: Ingest generated issue ref via native git push into bare repo.
 
----
+- **Combination 16: Search on Packed Syntax Blob (`tier3_combinations/c16_search_packed_syntax_blob.js`)** — 2 tests:
+  - `C16.1`: Range-fetch packed blob, tokenize via syntax engine, and apply search highlight.
+  - `C16.2`: Search across lines in packed multi-line comments.
 
-## 5. Test Harness Infrastructure
-
-The test harness in `e2e/harness/` provides zero-dependency test primitives:
-
-- **`framework.js`**: Custom async test runner with `describe`, `it`, lifecycle hooks, robust assertions, and multi-format reporting (Console, TAP, JUnit XML).
-- **`supervisor.js`**: Spawns and supervises Rust `sendforge` binaries and `sendforge serve` daemon on ephemeral TCP ports with health checking.
-- **`git_repo.js`**: Generates synthetic bare Git repositories, working clones, collaboration references (`createPullRequest`, `createIssue`, `attachReviewNote`), and synthetic DAG topologies (`simple_fork`, `divergent`, `fast_forward`, `criss_cross`, `orphan`, `linear_chain`).
-- **`http_client.js`**: Issues HTTP/1.1 requests supporting RFC 7233 byte ranges, loose object fetching (`/objects/xx/xxx`), metadata retrieval (`/meta.json`), and load flooding.
-- **`git_parser.js`**: In-harness reference parser for loose zlib objects, binary trees, commits, tags, and LCS diffing.
-- **`dag_helper.js`**: In-harness DAG traversal engine for Lowest Common Ancestor (LCA) resolution, commit history range collection, and 3-way tree diffing.
-- **`archive_validator.js`**: Binary validator for PKWARE ZIP and POSIX ustar `.tar.gz` archives.
-- **`blame_helper.js`**: In-harness DAG walker and Myers line provenance attribution helper.
+- **Combination 17: Format-Patch Packed & git am (`tier3_combinations/c17_format_patch_packed_git_am.js`)** — 2 tests:
+  - `C17.1`: Export multi-commit `git format-patch` from packed branches and apply cleanly via `git am`.
+  - `C17.2`: Single-commit format-patch export for packed commit applied via `git am`.
 
 ---
 
-## 6. How to Run the Tests
+### Tier 4: Real-World Workloads & High-Concurrency Application Scenarios
+Simulates realistic end-user developer journeys and high-concurrency traffic floods.
 
-### Quick Run (All Tiers)
+#### Phase 4 Workload Suites:
+- **Workload 12: Full Lifecycle Packfiles, Syntax & Collab (`tier4_workloads/w12_full_lifecycle_pack_syntax_collab.js`)** — 1 test:
+  - `W12.1`: Full lifecycle: packfile fetch -> syntax tokens -> search highlight -> issue draft -> PR format-patch -> `git am` ingestion.
+
+- **Workload 13: High-Concurrency Packfile Fetching (`tier4_workloads/w13_high_concurrency_pack_fetching.js`)** — 1 test:
+  - `W13.1`: 50 concurrent byte-range requests fetching packed objects simultaneously under load with 0 failures.
+
+- **Workload 14: Polyglot Syntax Browsing (`tier4_workloads/w14_polyglot_repo_syntax_browsing.js`)** — 1 test:
+  - `W14.1`: Rapid sequential browsing of 30+ files across 20+ distinct languages with tokenizer state machine continuity.
+
+- **Workload 15: Full Collaboration Lifecycle (`tier4_workloads/w15_full_collab_modal_workflow.js`)** — 1 test:
+  - `W15.1`: Multi-contributor collaboration simulation with issues, PRs, diffs, patches, and `git am` ingestion.
+
+---
+
+## 4. Test Execution & Invocation Guide
+
+### Running the Full E2E Test Suite
 ```bash
 ./e2e/run_e2e.sh
-# Or directly via Node:
+# or
 node e2e/runner.js
 ```
 
 ### Running Specific Tiers
 ```bash
-node e2e/runner.js --tier 1   # Run Tier 1 Feature Coverage
-node e2e/runner.js --tier 2   # Run Tier 2 Boundaries
-node e2e/runner.js --tier 3   # Run Tier 3 Combinations
-node e2e/runner.js --tier 4   # Run Tier 4 Workloads
+node e2e/runner.js --tier 1
+node e2e/runner.js --tier 2
+node e2e/runner.js --tier 3
+node e2e/runner.js --tier 4
 ```
 
-### Filtering by Test Suite Name
+### Filtering by Feature or Name
 ```bash
-node e2e/runner.js --filter "collab"
-node e2e/runner.js --filter "merge_base"
-node e2e/runner.js --filter "pr_viewer"
-node e2e/runner.js --filter "issues"
-node e2e/runner.js --filter "routing"
+node e2e/runner.js --filter "Feature 26"
+node e2e/runner.js --filter "Pack"
 ```
 
-### CI / Automated Reporting Output
+### Generating Reports (Console / TAP / JUnit XML)
 ```bash
-# TAP format:
-node e2e/runner.js --tap
-
-# JUnit XML export:
-node e2e/runner.js --junit
-node e2e/runner.js --xml-out test-results/e2e-report.xml
+node e2e/runner.js --format tap
+node e2e/runner.js --format junit --xml-out test-results.xml
 ```
-
----
-
-## 7. Verification Criteria & Acceptance Gates
-
-The E2E test suite enforces the following acceptance criteria:
-1. **100% Pass Rate**: All test suites across Tiers 1 through 4 must pass with 0 failures and 0 unhandled rejections.
-2. **Zero Resource Leaks**: All temporary Git repositories, sockets, and daemon processes must be cleanly terminated in `afterEach` / `afterAll` hooks.
-3. **No Flakiness**: All tests use ephemeral ports and isolated temporary directories to prevent race conditions during parallel or repeated runs.
-4. **Deterministic Oracle Validation**: All outputs are compared against deterministic ground truth from native Git commands or exact binary specification parsers.

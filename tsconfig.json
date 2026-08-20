@@ -29,6 +29,7 @@
   },
   "include": [
     "client/src/**/*",
+    "client/test/**/*",
     "client/tests/**/*",
     "vite.config.ts",
     "vitest.config.ts",

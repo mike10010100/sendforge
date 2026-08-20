@@ -6,6 +6,7 @@ import { formatRelativeTime, formatSha, getAuthorColor, getAuthorInitials } from
 export interface PullRequestsViewProps {
   readonly pulls: readonly PullRequest[];
   readonly onSelectPull?: ((id: string) => void) | undefined;
+  readonly onNewPull?: (() => void) | undefined;
   readonly initialFilter?: 'open' | 'merged' | 'closed' | 'all' | undefined;
   readonly initialQuery?: string | undefined;
   readonly initialLabel?: string | undefined;
@@ -15,6 +16,7 @@ export interface PullRequestsViewProps {
 export const PullRequestsView: FunctionalComponent<PullRequestsViewProps> = ({
   pulls,
   onSelectPull,
+  onNewPull,
   initialFilter = 'open',
   initialQuery = '',
   initialLabel = '',
@@ -252,6 +254,19 @@ export const PullRequestsView: FunctionalComponent<PullRequestsViewProps> = ({
               </button>
             )}
           </div>
+
+          {/* New Pull Request Action Button */}
+          {onNewPull && (
+            <button
+              type="button"
+              className="btn btn-primary collab-new-btn"
+              onClick={onNewPull}
+              data-testid="new-pr-btn"
+            >
+              <span>➕</span>
+              <span>New Pull Request</span>
+            </button>
+          )}
         </div>
       </div>
 

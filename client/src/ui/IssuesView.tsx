@@ -6,6 +6,7 @@ import { formatRelativeTime, getAuthorColor, getAuthorInitials } from './utils.j
 export interface IssuesViewProps {
   readonly issues: readonly Issue[];
   readonly onSelectIssue?: ((id: string) => void) | undefined;
+  readonly onNewIssue?: (() => void) | undefined;
   readonly initialFilter?: 'open' | 'closed' | 'all' | undefined;
   readonly initialQuery?: string | undefined;
   readonly initialLabel?: string | undefined;
@@ -15,6 +16,7 @@ export interface IssuesViewProps {
 export const IssuesView: FunctionalComponent<IssuesViewProps> = ({
   issues,
   onSelectIssue,
+  onNewIssue,
   initialFilter = 'open',
   initialQuery = '',
   initialLabel = '',
@@ -228,6 +230,19 @@ export const IssuesView: FunctionalComponent<IssuesViewProps> = ({
               </button>
             )}
           </div>
+
+          {/* New Issue Action Button */}
+          {onNewIssue && (
+            <button
+              type="button"
+              className="btn btn-primary collab-new-btn"
+              onClick={onNewIssue}
+              data-testid="new-issue-btn"
+            >
+              <span>➕</span>
+              <span>New Issue</span>
+            </button>
+          )}
         </div>
       </div>
 

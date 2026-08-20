@@ -5,6 +5,11 @@ export default defineConfig({
   plugins: [preact()],
   test: {
     environment: 'node',
-    include: ['client/tests/**/*.test.ts', 'client/tests/**/*.test.tsx'],
+    include: [
+      'client/test/**/*.test.ts',
+      'client/test/**/*.test.tsx',
+      'client/tests/**/*.test.ts',
+      'client/tests/**/*.test.tsx',
+    ],
   },
 });

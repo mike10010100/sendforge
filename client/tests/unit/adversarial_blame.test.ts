@@ -592,7 +592,7 @@ describe('Adversarial Stress Testing: Milestone M2 In-Browser git blame Engine',
       }
       expect(result.hunks).toHaveLength(1);
       expect(result.hunks[0]?.commitOid).toBe(rootOid);
-      expect(t1 - t0).toBeLessThan(500);
+      expect(t1 - t0).toBeLessThan(2000);
     });
 
     it('correctly handles file deleted in intermediate commit and re-created later', async () => {

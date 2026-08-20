@@ -36,6 +36,16 @@ export default tseslint.config(
     },
   },
   {
+    files: ['client/test/**/*', 'client/tests/**/*'],
+    rules: {
+      '@typescript-eslint/no-non-null-assertion': 'off',
+      '@typescript-eslint/require-await': 'off',
+      '@typescript-eslint/dot-notation': 'off',
+      '@typescript-eslint/prefer-optional-chain': 'off',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+    },
+  },
+  {
     ignores: [
       'dist/**',
       'public-dist/**',

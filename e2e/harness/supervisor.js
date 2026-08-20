@@ -222,3 +222,5 @@ export class SendforgeSupervisor {
     this.activeProcesses.clear();
   }
 }
+
+export { SendforgeSupervisor as Supervisor };
