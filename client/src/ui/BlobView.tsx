@@ -12,6 +12,7 @@ import {
   renderMarkdown,
   type LineRange,
 } from './utils.js';
+import { useEventListener, useStableCallback } from './hooks/useLifecycle.js';
 
 export interface BlobViewProps {
   readonly blob: GitBlobObject;
@@ -72,25 +73,24 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
     }
   };
 
+  const syncLineHash = useStableCallback(() => {
+    if (typeof window === 'undefined') return;
+    const parsed = parseLineHash(window.location.hash);
+    if (parsed) {
+      setSelectedRange(parsed);
+      setAnchorLine(parsed.start);
+      onSelectRange?.(parsed);
+      requestAnimationFrame(() => {
+        document.getElementById(`L${parsed.start}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      });
+    }
+  });
+
   useEffect(() => {
-    const sync = () => {
-      if (typeof window === 'undefined') return;
-      const parsed = parseLineHash(window.location.hash);
-      if (parsed) {
-        setSelectedRange(parsed);
-        setAnchorLine(parsed.start);
-        onSelectRange?.(parsed);
-        requestAnimationFrame(() => {
-          document.getElementById(`L${parsed.start}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-        });
-      }
-    };
-    sync();
-    window.addEventListener('hashchange', sync);
-    return () => {
-      window.removeEventListener('hashchange', sync);
-    };
-  }, [onSelectRange]);
+    syncLineHash();
+  }, [syncLineHash]);
+
+  useEventListener(typeof window !== 'undefined' ? window : null, 'hashchange', syncLineHash);
 
   const handleCopyContent = async () => {
     if (!blob.text) return;

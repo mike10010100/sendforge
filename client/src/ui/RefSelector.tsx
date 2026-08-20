@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { FunctionalComponent } from 'preact';
 import type { RepoBranch, RepoTag } from '../engine/types.js';
 import { formatSha } from './utils.js';
+import { useEventListener } from './hooks/useLifecycle.js';
 
 export { formatSha };
 
@@ -123,20 +124,11 @@ export const RefSelector: FunctionalComponent<RefSelectorProps> = ({
   }, [isOpen, isCurrentRefTag, initialTab, initialQuery]);
 
   // Click-outside listener
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOpen]);
+  useEventListener(isOpen && typeof document !== 'undefined' ? document : null, 'mousedown', (e: MouseEvent) => {
+    if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      setIsOpen(false);
+    }
+  });
 
   const handleSelect = (refName: string) => {
     onSelectRef(refName);

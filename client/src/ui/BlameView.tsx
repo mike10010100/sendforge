@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useCallback, useEffect, useMemo, useState } from 'preact/hooks';
 import type { FunctionalComponent } from 'preact';
 import type { GitBlobObject } from '../engine/types.js';
 import type { GitRepositoryClient } from '../engine/fetcher.js';
@@ -78,7 +78,7 @@ export const BlameView: FunctionalComponent<BlameViewProps> = ({
     return [];
   }, [fileLines, blob?.text, preloadedBlame]);
 
-  const loadBlame = async () => {
+  const loadBlame = useCallback(async () => {
     if (preloadedBlame) {
       setComputedBlame(preloadedBlame);
       setLoading(false);
@@ -90,7 +90,6 @@ export const BlameView: FunctionalComponent<BlameViewProps> = ({
       setLoading(false);
       return;
     }
-
 
     try {
       setLoading(true);
@@ -109,13 +108,12 @@ export const BlameView: FunctionalComponent<BlameViewProps> = ({
 
       setComputedBlame(result);
     } catch (err) {
-
       const msg = err instanceof Error ? err.message : String(err);
       setError(`Failed to compute blame for ${targetPath}: ${msg}`);
     } finally {
       setLoading(false);
     }
-  };
+  }, [client, commitOid, preloadedBlame, targetPath]);
 
   useEffect(() => {
     if (preloadedBlame) {
@@ -126,7 +124,7 @@ export const BlameView: FunctionalComponent<BlameViewProps> = ({
     if (client && commitOid && targetPath) {
       void loadBlame();
     }
-  }, [client, commitOid, targetPath, blob?.oid, preloadedBlame]);
+  }, [client, commitOid, targetPath, preloadedBlame, loadBlame]);
 
   if (loading) {
     return (

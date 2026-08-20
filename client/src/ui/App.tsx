@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
+import { useCallback, useEffect, useState } from 'preact/hooks';
 import type { FunctionalComponent } from 'preact';
 import { GitRepositoryClient, type TreeFileItem } from '../engine/fetcher.js';
 import { CollabClient, type Issue, type PullRequest } from '../engine/collab-client.js';
@@ -22,6 +22,7 @@ import { IssueDetailView } from './IssueDetailView.js';
 import { PullRequestsView } from './PullRequestsView.js';
 import { PRDetailView } from './PRDetailView.js';
 import { parseRoute, type Route } from './router.js';
+import { useEventListener, useStableCallback } from './hooks/useLifecycle.js';
 
 export interface AppProps {
   readonly baseUrl?: string;
@@ -59,8 +60,6 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
   const [downloadProgress, setDownloadProgress] = useState<{ completed: number; total: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const routeHandlerRef = useRef<((hash: string) => void) | null>(null);
 
   // Load ref state when currentRef changes
   const loadRefState = useCallback(
@@ -223,63 +222,6 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
     [client]
   );
 
-  // Load initial repository metadata & collaboration catalogs
-  useEffect(() => {
-    let isMounted = true;
-    const initMeta = async () => {
-      try {
-        setLoading(true);
-        const [repoMeta, loadedPulls, loadedIssues] = await Promise.all([
-          client.getMeta(),
-          collabClient.getPullRequests().catch(() => []),
-          collabClient.getIssues().catch(() => []),
-        ]);
-
-        if (!isMounted) return;
-        setMeta(repoMeta);
-        setPulls(loadedPulls);
-        setIssues(loadedIssues);
-        const defaultRef = repoMeta.default_branch || 'main';
-        setCurrentRef(defaultRef);
-
-        if (repoMeta.name) {
-          const title = repoMeta.description
-            ? `${repoMeta.name} — ${repoMeta.description}`
-            : `${repoMeta.name} — Sendforge`;
-          document.title = title;
-          const ogTitleEl = document.querySelector('meta[property="og:title"]');
-          if (ogTitleEl) ogTitleEl.setAttribute('content', title);
-          const twTitleEl = document.querySelector('meta[name="twitter:title"]');
-          if (twTitleEl) twTitleEl.setAttribute('content', title);
-          if (repoMeta.description) {
-            const ogDescEl = document.querySelector('meta[property="og:description"]');
-            if (ogDescEl) ogDescEl.setAttribute('content', repoMeta.description);
-            const twDescEl = document.querySelector('meta[name="twitter:description"]');
-            if (twDescEl) twDescEl.setAttribute('content', repoMeta.description);
-          }
-        }
-
-        const hash = typeof window !== 'undefined' ? window.location.hash : '';
-        if (hash) {
-          routeHandlerRef.current?.(hash);
-        } else {
-          void loadRefState(defaultRef, '');
-        }
-      } catch (err) {
-        if (!isMounted) return;
-        const msg = err instanceof Error ? err.message : String(err);
-        setError(`Failed to load repository metadata: ${msg}`);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    };
-
-    void initMeta();
-    return () => {
-      isMounted = false;
-    };
-  }, [client, collabClient, loadRefState]);
-
   // Hash Route Synchronizer
   const handleRouteChange = useCallback(
     (hash: string) => {
@@ -359,67 +301,101 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
     [currentPath, currentRef, meta, selectedCommitDiff, loadCommitDiff, loadRefState]
   );
 
-  routeHandlerRef.current = handleRouteChange;
-
-  // Listen to window hashchange once on mount
+  // Load initial repository metadata & collaboration catalogs
   useEffect(() => {
-    const onHashChange = () => {
-      routeHandlerRef.current?.(window.location.hash);
+    let isMounted = true;
+    const initMeta = async () => {
+      try {
+        setLoading(true);
+        const [repoMeta, loadedPulls, loadedIssues] = await Promise.all([
+          client.getMeta(),
+          collabClient.getPullRequests().catch(() => []),
+          collabClient.getIssues().catch(() => []),
+        ]);
+
+        if (!isMounted) return;
+        setMeta(repoMeta);
+        setPulls(loadedPulls);
+        setIssues(loadedIssues);
+        const defaultRef = repoMeta.default_branch || 'main';
+        setCurrentRef(defaultRef);
+
+        if (repoMeta.name) {
+          const title = repoMeta.description
+            ? `${repoMeta.name} — ${repoMeta.description}`
+            : `${repoMeta.name} — Sendforge`;
+          document.title = title;
+          const ogTitleEl = document.querySelector('meta[property="og:title"]');
+          if (ogTitleEl) ogTitleEl.setAttribute('content', title);
+          const twTitleEl = document.querySelector('meta[name="twitter:title"]');
+          if (twTitleEl) twTitleEl.setAttribute('content', title);
+          if (repoMeta.description) {
+            const ogDescEl = document.querySelector('meta[property="og:description"]');
+            if (ogDescEl) ogDescEl.setAttribute('content', repoMeta.description);
+            const twDescEl = document.querySelector('meta[name="twitter:description"]');
+            if (twDescEl) twDescEl.setAttribute('content', repoMeta.description);
+          }
+        }
+
+        const hash = typeof window !== 'undefined' ? window.location.hash : '';
+        if (hash) {
+          handleRouteChange(hash);
+        } else {
+          void loadRefState(defaultRef, '');
+        }
+      } catch (err) {
+        if (!isMounted) return;
+        const msg = err instanceof Error ? err.message : String(err);
+        setError(`Failed to load repository metadata: ${msg}`);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
     };
 
-    window.addEventListener('hashchange', onHashChange);
-    if (window.location.hash) {
-      routeHandlerRef.current?.(window.location.hash);
-    }
-
+    void initMeta();
     return () => {
-      window.removeEventListener('hashchange', onHashChange);
+      isMounted = false;
     };
-  }, []);
+  }, [client, collabClient, handleRouteChange, loadRefState]);
+
+  const handleHashChange = useStableCallback(() => {
+    if (typeof window !== 'undefined') {
+      handleRouteChange(window.location.hash);
+    }
+  });
+
+  // Listen to window hashchange
+  useEventListener(typeof window !== 'undefined' ? window : null, 'hashchange', handleHashChange);
 
   // Global hotkey handler (Ctrl+K / Cmd+K / T)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setIsFinderOpen((prev) => !prev);
-      } else if (
-        e.key.toLowerCase() === 't' &&
-        !isFinderOpen &&
-        !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)
-      ) {
-        e.preventDefault();
-        setIsFinderOpen(true);
-      }
-    };
+  useEventListener(typeof window !== 'undefined' ? window : null, 'keydown', (e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      setIsFinderOpen((prev) => !prev);
+    } else if (
+      e.key.toLowerCase() === 't' &&
+      !isFinderOpen &&
+      !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)
+    ) {
+      e.preventDefault();
+      setIsFinderOpen(true);
+    }
+  });
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isFinderOpen]);
+  // Snapshot download dropdown dismissal on click-outside
+  useEventListener(isDownloadOpen && typeof document !== 'undefined' ? document : null, 'mousedown', (e: MouseEvent) => {
+    const target = e.target as HTMLElement | null;
+    if (!target?.closest('.download-dropdown-container')) {
+      setIsDownloadOpen(false);
+    }
+  });
 
-  // Snapshot download dropdown dismissal on click-outside and Escape
-  useEffect(() => {
-    if (!isDownloadOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (!target?.closest('.download-dropdown-container')) {
-        setIsDownloadOpen(false);
-      }
-    };
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setIsDownloadOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isDownloadOpen]);
+  // Snapshot download dropdown dismissal on Escape
+  useEventListener(isDownloadOpen && typeof document !== 'undefined' ? document : null, 'keydown', (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setIsDownloadOpen(false);
+    }
+  });
 
   const handleDownloadSnapshot = async (format: 'zip' | 'tar.gz') => {
     if (!currentCommit || downloadingFormat !== null) return;
