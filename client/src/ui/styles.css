@@ -396,13 +396,15 @@ a:hover {
   display: inline-block;
   vertical-align: middle;
   margin-right: 6px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .markdown-body .md-image {
   max-width: 100%;
   border-radius: var(--radius-md);
-  margin: 16px 0;
+  margin: 16px auto;
+  display: block;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .markdown-body .table-wrapper {

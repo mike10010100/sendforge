@@ -1,3 +1,5 @@
+![Sendforge Hero Banner](assets/hero-banner.png)
+
 # 🚀 Sendforge
 
 > **A high-performance, static-first Git forge powered by `sendfile(2)` static serving and in-browser Git resolution.**

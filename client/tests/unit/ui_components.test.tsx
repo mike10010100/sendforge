@@ -48,6 +48,28 @@ describe('UI Components & Renderers', () => {
     expect(html).toContain('<pre><code class="language-rust">fn main() { println!(&quot;Hello&quot;); }</code></pre>');
   });
 
+  it('renders inline badges, blockquotes, and hero banner images properly', () => {
+    const md = [
+      '![Hero Banner](assets/hero-banner.png)',
+      '',
+      '# 🚀 Sendforge',
+      '',
+      '> **A high-performance Git forge.**',
+      '',
+      '[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)',
+      '[![Rust 100% Safe](https://img.shields.io/badge/Rust-100%25-orange.svg)](src/)',
+      '[![TypeScript Strict](https://img.shields.io/badge/TypeScript-Strict-blue.svg)](client/)',
+    ].join('\n');
+
+    const html = renderMarkdown(md);
+    expect(html).toContain('<img src="assets/hero-banner.png" alt="Hero Banner" class="md-image" />');
+    expect(html).toContain('<blockquote><p><strong>A high-performance Git forge.</strong></p></blockquote>');
+    // Ensure badges are inside a single <p> tag and flow inline together
+    expect(html).toContain(
+      '<p><a href="LICENSE" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" class="md-badge" /></a> <a href="src/" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Rust-100%25-orange.svg" alt="Rust 100% Safe" class="md-badge" /></a> <a href="client/" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/TypeScript-Strict-blue.svg" alt="TypeScript Strict" class="md-badge" /></a></p>'
+    );
+  });
+
   it('renders TreeView component with file and directory entries', () => {
     const entries: readonly GitTreeEntry[] = [
       { mode: '040000', name: 'src', oid: '1111111111111111111111111111111111111111', isTree: true, isSubmodule: false, isSymlink: false },

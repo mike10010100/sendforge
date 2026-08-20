@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 export default defineConfig({
   plugins: [preact()],
   root: resolve(__dirname, 'client/src'),
+  publicDir: resolve(__dirname, 'public'),
   build: {
     outDir: resolve(__dirname, 'dist'),
     emptyOutDir: true,

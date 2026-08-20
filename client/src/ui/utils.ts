@@ -99,6 +99,15 @@ export function renderMarkdown(markdown: string): string {
   let blockquoteLines: string[] = [];
   let inTable = false;
   let tableRows: string[] = [];
+  let paragraphLines: string[] = [];
+
+  const flushParagraph = () => {
+    if (paragraphLines.length > 0) {
+      const content = paragraphLines.map((l) => formatInlineMarkdown(l)).join(' ');
+      htmlParts.push(`<p>${content}</p>`);
+      paragraphLines = [];
+    }
+  };
 
   const flushList = () => {
     if (inList) {
@@ -128,6 +137,7 @@ export function renderMarkdown(markdown: string): string {
   for (const rawLine of lines) {
     // Code block detection
     if (rawLine.startsWith('```')) {
+      flushParagraph();
       flushList();
       flushBlockquote();
       flushTable();
@@ -154,6 +164,7 @@ export function renderMarkdown(markdown: string): string {
     const trimmed = rawLine.trim();
 
     if (!trimmed) {
+      flushParagraph();
       flushList();
       flushBlockquote();
       flushTable();
@@ -162,6 +173,7 @@ export function renderMarkdown(markdown: string): string {
 
     // Horizontal Rules
     if (trimmed === '---' || trimmed === '***' || trimmed === '___') {
+      flushParagraph();
       flushList();
       flushBlockquote();
       flushTable();
@@ -171,6 +183,7 @@ export function renderMarkdown(markdown: string): string {
 
     // Blockquotes
     if (trimmed.startsWith('>')) {
+      flushParagraph();
       flushList();
       flushTable();
       inBlockquote = true;
@@ -182,6 +195,7 @@ export function renderMarkdown(markdown: string): string {
 
     // Table rows
     if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+      flushParagraph();
       flushList();
       flushBlockquote();
       inTable = true;
@@ -193,21 +207,25 @@ export function renderMarkdown(markdown: string): string {
 
     // Headers
     if (trimmed.startsWith('# ')) {
+      flushParagraph();
       flushList();
       htmlParts.push(`<h1>${formatInlineMarkdown(trimmed.slice(2))}</h1>`);
       continue;
     }
     if (trimmed.startsWith('## ')) {
+      flushParagraph();
       flushList();
       htmlParts.push(`<h2>${formatInlineMarkdown(trimmed.slice(3))}</h2>`);
       continue;
     }
     if (trimmed.startsWith('### ')) {
+      flushParagraph();
       flushList();
       htmlParts.push(`<h3>${formatInlineMarkdown(trimmed.slice(4))}</h3>`);
       continue;
     }
     if (trimmed.startsWith('#### ')) {
+      flushParagraph();
       flushList();
       htmlParts.push(`<h4>${formatInlineMarkdown(trimmed.slice(5))}</h4>`);
       continue;
@@ -215,6 +233,7 @@ export function renderMarkdown(markdown: string): string {
 
     // Lists
     if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+      flushParagraph();
       if (!inList) {
         htmlParts.push('<ul>');
         inList = true;
@@ -230,13 +249,14 @@ export function renderMarkdown(markdown: string): string {
       continue;
     }
 
-    // Paragraph
-    htmlParts.push(`<p>${formatInlineMarkdown(sanitizedLine)}</p>`);
+    // Accumulate lines into current paragraph
+    paragraphLines.push(sanitizedLine);
   }
 
   if (inCodeBlock) {
     htmlParts.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
   }
+  flushParagraph();
   flushList();
   flushBlockquote();
   flushTable();

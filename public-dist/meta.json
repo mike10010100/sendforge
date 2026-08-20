@@ -1,0 +1,28 @@
+{
+  "name": "sendforge",
+  "description": "Unnamed repository; edit this file 'description' to name the repository.",
+  "owner": "mike10010100",
+  "clone_url": "https://github.com/mike10010100/sendforge.git",
+  "default_branch": "main",
+  "branches": [
+    {
+      "name": "main",
+      "target": "efd72e5b78deb9c256af6ad554884d15aa3c14e1",
+      "is_default": true
+    }
+  ],
+  "tags": [],
+  "head": {
+    "ref": "refs/heads/main",
+    "sha": "efd72e5b78deb9c256af6ad554884d15aa3c14e1"
+  },
+  "stats": {
+    "branch_count": 1,
+    "tag_count": 0,
+    "commit_count": 0,
+    "file_count": 0
+  },
+  "has_readme": false,
+  "readme_filename": null,
+  "updated_at": "2026-08-20T03:23:41Z"
+}

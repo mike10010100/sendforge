@@ -1,0 +1,12 @@
+[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = true
+	ignorecase = true
+	precomposeunicode = true
+[remote "origin"]
+	url = /Users/mike10010100/git/hybrid-gitforge/.
+[sendforge]
+	name = sendforge
+	owner = mike10010100
+	cloneUrl = https://github.com/mike10010100/sendforge.git

@@ -30,6 +30,7 @@ export default tseslint.config(
   {
     ignores: [
       'dist/**',
+      'public-dist/**',
       'node_modules/**',
       'target/**',
       'src/**',
