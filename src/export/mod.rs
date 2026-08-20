@@ -93,24 +93,33 @@ pub fn export_static_site(
         let pack_dir = repo_path.join("objects").join("pack");
         if pack_dir.is_dir() {
             if let Ok(entries) = fs::read_dir(&pack_dir) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if path.extension().and_then(|s| s.to_str()) == Some("pack") {
-                        if let Ok(pack_data) = fs::read(&path) {
-                            if let Ok(mut child) = std::process::Command::new("git")
-                                .arg("--git-dir")
-                                .arg(repo_path)
-                                .arg("unpack-objects")
-                                .arg("-q")
-                                .stdin(std::process::Stdio::piped())
-                                .spawn()
-                            {
-                                if let Some(mut stdin) = child.stdin.take() {
-                                    use std::io::Write;
-                                    let _ = stdin.write_all(&pack_data);
-                                }
-                                let _ = child.wait();
+                let pack_files: Vec<std::path::PathBuf> = entries
+                    .flatten()
+                    .map(|e| e.path())
+                    .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("pack"))
+                    .collect();
+
+                for pack_path in pack_files {
+                    if let Ok(pack_data) = fs::read(&pack_path) {
+                        let _ = fs::remove_file(&pack_path);
+                        let idx_path = pack_path.with_extension("idx");
+                        let _ = fs::remove_file(&idx_path);
+                        let rev_path = pack_path.with_extension("rev");
+                        let _ = fs::remove_file(&rev_path);
+
+                        if let Ok(mut child) = std::process::Command::new("git")
+                            .arg("--git-dir")
+                            .arg(repo_path)
+                            .arg("unpack-objects")
+                            .arg("-q")
+                            .stdin(std::process::Stdio::piped())
+                            .spawn()
+                        {
+                            if let Some(mut stdin) = child.stdin.take() {
+                                use std::io::Write;
+                                let _ = stdin.write_all(&pack_data);
                             }
+                            let _ = child.wait();
                         }
                     }
                 }

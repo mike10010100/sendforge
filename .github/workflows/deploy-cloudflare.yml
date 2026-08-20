@@ -34,15 +34,9 @@ jobs:
 
       - name: Export Static Site
         run: |
-          # Convert current repository clone to bare repo for export
-          git clone --bare . /tmp/bare-repo.git
+          # Convert current repository clone to bare repo with full object copy
+          git clone --no-local --bare . /tmp/bare-repo.git
           echo "Sendforge - High-performance static-first Git forge" > /tmp/bare-repo.git/description
-          for p in /tmp/bare-repo.git/objects/pack/*.pack; do
-            if [ -f "$p" ]; then
-              git --git-dir=/tmp/bare-repo.git unpack-objects < "$p"
-              rm -f "$p" "${p%.pack}.idx"
-            fi
-          done
           ./target/release/sendforge export /tmp/bare-repo.git ./public-dist --frontend-dist ./dist
 
       - name: Deploy to Cloudflare Pages
