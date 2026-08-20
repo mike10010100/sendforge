@@ -372,6 +372,65 @@ a:hover {
   padding: 0;
 }
 
+.markdown-body blockquote {
+  margin: 16px 0;
+  padding: 8px 16px;
+  color: var(--text-secondary);
+  border-left: 4px solid var(--accent-color);
+  background-color: var(--bg-secondary);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.markdown-body blockquote p {
+  margin: 0;
+}
+
+.markdown-body hr {
+  height: 1px;
+  background-color: var(--border-color);
+  border: none;
+  margin: 24px 0;
+}
+
+.markdown-body .md-badge {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 6px;
+  margin-bottom: 8px;
+}
+
+.markdown-body .md-image {
+  max-width: 100%;
+  border-radius: var(--radius-md);
+  margin: 16px 0;
+}
+
+.markdown-body .table-wrapper {
+  overflow-x: auto;
+  margin: 16px 0;
+}
+
+.markdown-body .markdown-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.markdown-body .markdown-table th,
+.markdown-body .markdown-table td {
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+}
+
+.markdown-body .markdown-table th {
+  background-color: var(--bg-tertiary);
+  font-weight: 600;
+}
+
+.markdown-body .markdown-table tr:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
 /* Commit Log */
 .commit-timeline {
   display: flex;

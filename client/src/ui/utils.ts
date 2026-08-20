@@ -43,8 +43,50 @@ export function escapeHtml(str: string): string {
     .replace(/'/g, '&#039;');
 }
 
+function stripFormattingHtmlTags(text: string): string {
+  return text
+    .replace(/^<\/?(p|div|center|span)(\s+[^>]*)?>/gi, '')
+    .replace(/<\/?(p|div|center|span)(\s+[^>]*)?>$/gi, '')
+    .trim();
+}
+
+function renderTable(rows: string[]): string {
+  if (rows.length < 2) return rows.map((r) => `<p>${formatInlineMarkdown(r)}</p>`).join('\n');
+  const headerRow = rows[0];
+  if (!headerRow) return '';
+
+  const parseCells = (row: string) =>
+    row
+      .trim()
+      .replace(/^\|/, '')
+      .replace(/\|$/, '')
+      .split('|')
+      .map((c) => c.trim());
+
+  const headers = parseCells(headerRow);
+  const bodyRows = rows.slice(2);
+
+  let html = '<div class="table-wrapper"><table class="markdown-table"><thead><tr>';
+  for (const h of headers) {
+    html += `<th>${formatInlineMarkdown(h)}</th>`;
+  }
+  html += '</tr></thead><tbody>';
+
+  for (const row of bodyRows) {
+    const cells = parseCells(row);
+    html += '<tr>';
+    for (let i = 0; i < headers.length; i++) {
+      html += `<td>${formatInlineMarkdown(cells[i] ?? '')}</td>`;
+    }
+    html += '</tr>';
+  }
+
+  html += '</tbody></table></div>';
+  return html;
+}
+
 /**
- * Lightweight, safe CommonMark subset renderer for READMEs and markdown files.
+ * Lightweight, safe, feature-rich CommonMark subset renderer for READMEs and markdown files.
  */
 export function renderMarkdown(markdown: string): string {
   const lines = markdown.split(/\r?\n/);
@@ -53,10 +95,42 @@ export function renderMarkdown(markdown: string): string {
   let codeLang = '';
   let codeLines: string[] = [];
   let inList = false;
+  let inBlockquote = false;
+  let blockquoteLines: string[] = [];
+  let inTable = false;
+  let tableRows: string[] = [];
+
+  const flushList = () => {
+    if (inList) {
+      htmlParts.push('</ul>');
+      inList = false;
+    }
+  };
+
+  const flushBlockquote = () => {
+    if (inBlockquote) {
+      htmlParts.push(
+        `<blockquote><p>${blockquoteLines.map((l) => formatInlineMarkdown(l)).join('<br />')}</p></blockquote>`
+      );
+      inBlockquote = false;
+      blockquoteLines = [];
+    }
+  };
+
+  const flushTable = () => {
+    if (inTable) {
+      htmlParts.push(renderTable(tableRows));
+      inTable = false;
+      tableRows = [];
+    }
+  };
 
   for (const rawLine of lines) {
     // Code block detection
     if (rawLine.startsWith('```')) {
+      flushList();
+      flushBlockquote();
+      flushTable();
       if (inCodeBlock) {
         htmlParts.push(
           `<pre><code class="language-${escapeHtml(codeLang)}">${escapeHtml(
@@ -66,10 +140,6 @@ export function renderMarkdown(markdown: string): string {
         inCodeBlock = false;
         codeLines = [];
       } else {
-        if (inList) {
-          htmlParts.push('</ul>');
-          inList = false;
-        }
         inCodeBlock = true;
         codeLang = rawLine.slice(3).trim();
       }
@@ -84,27 +154,61 @@ export function renderMarkdown(markdown: string): string {
     const trimmed = rawLine.trim();
 
     if (!trimmed) {
-      if (inList) {
-        htmlParts.push('</ul>');
-        inList = false;
-      }
+      flushList();
+      flushBlockquote();
+      flushTable();
       continue;
+    }
+
+    // Horizontal Rules
+    if (trimmed === '---' || trimmed === '***' || trimmed === '___') {
+      flushList();
+      flushBlockquote();
+      flushTable();
+      htmlParts.push('<hr />');
+      continue;
+    }
+
+    // Blockquotes
+    if (trimmed.startsWith('>')) {
+      flushList();
+      flushTable();
+      inBlockquote = true;
+      blockquoteLines.push(trimmed.replace(/^>\s*/, ''));
+      continue;
+    } else if (inBlockquote) {
+      flushBlockquote();
+    }
+
+    // Table rows
+    if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+      flushList();
+      flushBlockquote();
+      inTable = true;
+      tableRows.push(trimmed);
+      continue;
+    } else if (inTable) {
+      flushTable();
     }
 
     // Headers
     if (trimmed.startsWith('# ')) {
+      flushList();
       htmlParts.push(`<h1>${formatInlineMarkdown(trimmed.slice(2))}</h1>`);
       continue;
     }
     if (trimmed.startsWith('## ')) {
+      flushList();
       htmlParts.push(`<h2>${formatInlineMarkdown(trimmed.slice(3))}</h2>`);
       continue;
     }
     if (trimmed.startsWith('### ')) {
+      flushList();
       htmlParts.push(`<h3>${formatInlineMarkdown(trimmed.slice(4))}</h3>`);
       continue;
     }
     if (trimmed.startsWith('#### ')) {
+      flushList();
       htmlParts.push(`<h4>${formatInlineMarkdown(trimmed.slice(5))}</h4>`);
       continue;
     }
@@ -118,37 +222,79 @@ export function renderMarkdown(markdown: string): string {
       htmlParts.push(`<li>${formatInlineMarkdown(trimmed.slice(2))}</li>`);
       continue;
     } else if (inList) {
-      htmlParts.push('</ul>');
-      inList = false;
+      flushList();
+    }
+
+    const sanitizedLine = stripFormattingHtmlTags(trimmed);
+    if (!sanitizedLine) {
+      continue;
     }
 
     // Paragraph
-    htmlParts.push(`<p>${formatInlineMarkdown(trimmed)}</p>`);
+    htmlParts.push(`<p>${formatInlineMarkdown(sanitizedLine)}</p>`);
   }
 
   if (inCodeBlock) {
     htmlParts.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
   }
-  if (inList) {
-    htmlParts.push('</ul>');
-  }
+  flushList();
+  flushBlockquote();
+  flushTable();
 
   return htmlParts.join('\n');
 }
 
 function formatInlineMarkdown(text: string): string {
-  let res = escapeHtml(text);
-  // Inline code: `code`
-  res = res.replace(/`([^`]+)`/g, '<code>$1</code>');
+  let res = text;
+
+  // Linked badges/images: [![alt](imgUrl)](linkUrl)
+  res = res.replace(
+    /\[!\[([^\]]*)\]\(([^)]+)\)\]\(([^)]+)\)/g,
+    '<a href="$3" target="_blank" rel="noopener noreferrer"><img src="$2" alt="$1" class="md-badge" /></a>'
+  );
+
+  // Standalone images: ![alt](imgUrl)
+  res = res.replace(
+    /!\[([^\]]*)\]\(([^)]+)\)/g,
+    '<img src="$2" alt="$1" class="md-image" />'
+  );
+
+  // Raw <a><img .../></a> if present
+  res = res.replace(
+    /<a\s+href="([^"]+)"\s*>\s*<img\s+src="([^"]+)"\s*(?:alt="([^"]*)")?\s*\/?>\s*<\/a>/gi,
+    '<a href="$1" target="_blank" rel="noopener noreferrer"><img src="$2" alt="$3" class="md-badge" /></a>'
+  );
+
+  // Raw <img .../> if present
+  res = res.replace(
+    /<img\s+src="([^"]+)"\s*(?:alt="([^"]*)")?\s*(?:width="[^"]*")?\s*\/?>/gi,
+    '<img src="$1" alt="$2" class="md-image" />'
+  );
+
+  // Preserve inline code spans: `code`
+  const codeSpans: string[] = [];
+  res = res.replace(/`([^`]+)`/g, (_match, p1: string) => {
+    codeSpans.push(escapeHtml(p1));
+    return `__CODE_SPAN_${codeSpans.length - 1}__`;
+  });
+
+  // Regular links: [label](url)
+  res = res.replace(
+    /\[([^\]]+)\]\((https?:\/\/[^\s)]+|[^\s)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
+  );
+
   // Bold: **text**
   res = res.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   // Italic: *text*
   res = res.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-  // Links: [label](url)
-  res = res.replace(
-    /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
-    '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
-  );
+
+  // Restore inline code spans
+  res = res.replace(/__CODE_SPAN_(\d+)__/g, (_match, idxStr: string) => {
+    const idx = parseInt(idxStr, 10);
+    return `<code>${codeSpans[idx] ?? ''}</code>`;
+  });
+
   return res;
 }
 
