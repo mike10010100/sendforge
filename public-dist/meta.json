@@ -7,45 +7,45 @@
   "branches": [
     {
       "name": "main",
-      "target": "b712297ee9dabbcccd2603fa4665a28d82bb02b4",
+      "target": "8208a0705592f524b829b0d0db0998f61acfcd97",
       "is_default": true,
-      "latest_commit_date": "2026-08-20T03:23:55Z"
+      "latest_commit_date": "2026-08-20T03:37:37Z"
     }
   ],
   "tags": [],
   "head": {
     "ref": "refs/heads/main",
-    "sha": "b712297ee9dabbcccd2603fa4665a28d82bb02b4"
+    "sha": "8208a0705592f524b829b0d0db0998f61acfcd97"
   },
   "latest_commit": {
-    "id": "b712297ee9dabbcccd2603fa4665a28d82bb02b4",
-    "short_id": "b712297",
-    "tree": "3227e8bfff78aa9c317d4e25f82aa54516fd4613",
+    "id": "8208a0705592f524b829b0d0db0998f61acfcd97",
+    "short_id": "8208a07",
+    "tree": "231fb73466dd488e5003eb1a8e3e0ade42c70ea8",
     "parents": [
-      "efd72e5b78deb9c256af6ad554884d15aa3c14e1"
+      "30d542606f057b0f21574ede2bf89c89e269729c"
     ],
     "author": {
       "name": "Michael Paulauski",
       "email": "mike10010100@gmail.com",
-      "timestamp": 1787196235,
-      "date": "2026-08-20T03:23:55Z"
+      "timestamp": 1787197057,
+      "date": "2026-08-20T03:37:37Z"
     },
     "committer": {
       "name": "Michael Paulauski",
       "email": "mike10010100@gmail.com",
-      "timestamp": 1787196235,
-      "date": "2026-08-20T03:23:55Z"
+      "timestamp": 1787197057,
+      "date": "2026-08-20T03:37:37Z"
     },
-    "message": "fix(ui): group markdown paragraph lines inline for side-by-side badges and bundle hero banner asset",
-    "summary": "fix(ui): group markdown paragraph lines inline for side-by-side badges and bundle hero banner asset"
+    "message": "ci: fix rustfmt check and modernize cloudflare deploy workflow step",
+    "summary": "ci: fix rustfmt check and modernize cloudflare deploy workflow step"
   },
   "stats": {
     "branch_count": 1,
     "tag_count": 0,
-    "commit_count": 13,
+    "commit_count": 15,
     "file_count": 19
   },
   "has_readme": true,
   "readme_filename": "README.md",
-  "updated_at": "2026-08-20T03:30:57Z"
+  "updated_at": "2026-08-20T03:52:15Z"
 }

@@ -8,12 +8,14 @@ export interface DiffViewProps {
   readonly fileDiffs: readonly FileDiff[];
   readonly commit?: GitCommitObject | null;
   readonly onSelectCommit?: (sha: string) => void;
+  readonly onBack?: () => void;
 }
 
 export const DiffView: FunctionalComponent<DiffViewProps> = ({
   fileDiffs,
   commit,
   onSelectCommit,
+  onBack,
 }) => {
   const [viewMode, setViewMode] = useState<'unified' | 'split'>('unified');
   const [collapsedFiles, setCollapsedFiles] = useState<Record<string, boolean>>({});
@@ -30,6 +32,18 @@ export const DiffView: FunctionalComponent<DiffViewProps> = ({
 
   return (
     <div className="diff-view-container">
+      {onBack && (
+        <div style={{ marginBottom: '12px' }}>
+          <button
+            type="button"
+            className="btn"
+            onClick={onBack}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            ← Back to Commits
+          </button>
+        </div>
+      )}
       {commit && (
         <div className="box" style={{ marginBottom: '16px' }}>
           <div className="box-header">

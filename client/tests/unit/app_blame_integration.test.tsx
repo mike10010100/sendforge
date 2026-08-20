@@ -121,7 +121,6 @@ describe('App.tsx & BlobView & BlameView Integration Verification', () => {
     expect(html).toContain('app-container');
     expect(html).toContain('📁 Code');
     expect(html).toContain('📜 Commits');
-    expect(html).toContain('⚡ Diffs');
     expect(html).toContain('🔍 Find file');
     expect(html).toContain('Loading repository data...');
   });

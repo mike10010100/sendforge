@@ -24,7 +24,8 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
   const [client] = useState(() => new GitRepositoryClient(baseUrl));
   const [meta, setMeta] = useState<RepoMeta | null>(null);
   const [currentRef, setCurrentRef] = useState<string>('main');
-  const [activeTab, setActiveTab] = useState<'code' | 'commits' | 'diff'>('code');
+  const [activeTab, setActiveTab] = useState<'code' | 'commits'>('code');
+  const [selectedCommitDiff, setSelectedCommitDiff] = useState<string | null>(null);
 
   const [currentCommit, setCurrentCommit] = useState<GitCommitObject | null>(null);
   const [currentTree, setCurrentTree] = useState<GitTreeObject | null>(null);
@@ -152,7 +153,8 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
     async (commitOid: string) => {
       try {
         setLoading(true);
-        setActiveTab('diff');
+        setActiveTab('commits');
+        setSelectedCommitDiff(commitOid);
         const commit = await client.getCommit(commitOid);
         setCurrentCommit(commit);
 
@@ -342,6 +344,7 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
                 e.preventDefault();
                 setCurrentPath('');
                 setActiveTab('code');
+                setSelectedCommitDiff(null);
                 void loadRefState(currentRef, '');
               }}
             >
@@ -374,6 +377,7 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
             className={`nav-tab ${activeTab === 'code' ? 'active' : ''}`}
             onClick={() => {
               setActiveTab('code');
+              setSelectedCommitDiff(null);
             }}
           >
             📁 Code
@@ -383,6 +387,7 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
             className={`nav-tab ${activeTab === 'commits' ? 'active' : ''}`}
             onClick={() => {
               setActiveTab('commits');
+              setSelectedCommitDiff(null);
             }}
           >
             📜 Commits{' '}
@@ -391,19 +396,6 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
                 {commitHistory.length > 0 ? commitHistory.length : meta.stats.commit_count}
               </span>
             )}
-          </button>
-          <button
-            type="button"
-            className={`nav-tab ${activeTab === 'diff' ? 'active' : ''}`}
-            onClick={() => {
-              if (currentCommit) {
-                void loadCommitDiff(currentCommit.oid);
-              } else {
-                setActiveTab('diff');
-              }
-            }}
-          >
-            ⚡ Diffs
           </button>
         </nav>
       </header>
@@ -568,17 +560,20 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
               readmeBlob={readmeBlob}
             />
           ) : null
-        ) : activeTab === 'commits' ? (
-          <CommitLog
-            commits={commitHistory}
-            onSelectCommit={(sha) => {
-              void loadCommitDiff(sha);
-            }}
-          />
-        ) : (
+        ) : selectedCommitDiff ? (
           <DiffView
             fileDiffs={fileDiffs}
             commit={currentCommit}
+            onSelectCommit={(sha) => {
+              void loadCommitDiff(sha);
+            }}
+            onBack={() => {
+              setSelectedCommitDiff(null);
+            }}
+          />
+        ) : (
+          <CommitLog
+            commits={commitHistory}
             onSelectCommit={(sha) => {
               void loadCommitDiff(sha);
             }}
