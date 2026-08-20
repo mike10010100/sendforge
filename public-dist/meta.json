@@ -7,42 +7,42 @@
   "branches": [
     {
       "name": "main",
-      "target": "76b27f6794e0ed23cb8f358c45aef4f24a0324eb",
+      "target": "613a423e2f8b214645641ed9a444f2d29c54efb3",
       "is_default": true,
-      "latest_commit_date": "2026-08-20T05:29:32Z"
+      "latest_commit_date": "2026-08-20T14:05:42Z"
     }
   ],
   "tags": [],
   "head": {
     "ref": "refs/heads/main",
-    "sha": "76b27f6794e0ed23cb8f358c45aef4f24a0324eb"
+    "sha": "613a423e2f8b214645641ed9a444f2d29c54efb3"
   },
   "latest_commit": {
-    "id": "76b27f6794e0ed23cb8f358c45aef4f24a0324eb",
-    "short_id": "76b27f6",
-    "tree": "769920d039b2d8426faef0e0da66a6cb498a7e87",
+    "id": "613a423e2f8b214645641ed9a444f2d29c54efb3",
+    "short_id": "613a423",
+    "tree": "46e0317c3d6f80adc9d05ee3f9527d0f00150d65",
     "parents": [
-      "391c7f72379a9fd84cc4f7c829dd82095a1ce0ab"
+      "76b27f6794e0ed23cb8f358c45aef4f24a0324eb"
     ],
     "author": {
       "name": "Michael Paulauski",
       "email": "mike10010100@gmail.com",
-      "timestamp": 1787203772,
-      "date": "2026-08-20T05:29:32Z"
+      "timestamp": 1787234742,
+      "date": "2026-08-20T14:05:42Z"
     },
     "committer": {
       "name": "Michael Paulauski",
       "email": "mike10010100@gmail.com",
-      "timestamp": 1787203772,
-      "date": "2026-08-20T05:29:32Z"
+      "timestamp": 1787234742,
+      "date": "2026-08-20T14:05:42Z"
     },
-    "message": "feat(phase3): complete git-native pull requests and issues with in-browser merge-base engine",
-    "summary": "feat(phase3): complete git-native pull requests and issues with in-browser merge-base engine"
+    "message": "feat(seo): add high-resolution Open Graph social preview card and metadata for Bluesky and Twitter",
+    "summary": "feat(seo): add high-resolution Open Graph social preview card and metadata for Bluesky and Twitter"
   },
   "stats": {
     "branch_count": 1,
     "tag_count": 0,
-    "commit_count": 17,
+    "commit_count": 18,
     "file_count": 19,
     "pull_count": 0,
     "open_pull_count": 0,
@@ -51,5 +51,5 @@
   },
   "has_readme": true,
   "readme_filename": "README.md",
-  "updated_at": "2026-08-20T14:05:20Z"
+  "updated_at": "2026-08-20T14:06:14Z"
 }
