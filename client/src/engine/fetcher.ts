@@ -354,6 +354,17 @@ export class GitRepositoryClient {
           throw new Error(`HTTP error ${res.status} fetching object ${oid}`);
         }
 
+        const headersObj: unknown = res.headers;
+        if (headersObj && typeof headersObj === 'object' && 'get' in headersObj) {
+          const getHeader = (headersObj as { get?: unknown }).get;
+          if (typeof getHeader === 'function') {
+            const ct: unknown = (getHeader as (name: string) => unknown).call(headersObj, 'content-type');
+            if (typeof ct === 'string' && ct.includes('text/html')) {
+              throw new ObjectNotFoundError(oid, 404);
+            }
+          }
+        }
+
         const compressed = new Uint8Array(await res.arrayBuffer());
         const uncompressed = await inflateZlib(compressed);
 
