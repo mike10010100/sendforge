@@ -1,15 +1,15 @@
 //! Integration tests for Git loose object compression, decompression, and parsing.
 
-use std::fs;
-use std::io::Write;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
+use std::fs;
+use std::io::Write;
 use tempfile::tempdir;
 
 use sendforge::error::SendforgeError;
 use sendforge::repo::objects::{
-    compute_object_sha, parse_commit, parse_signature, parse_tag, parse_tree,
-    peel_tag, read_loose_object, ObjectType,
+    compute_object_sha, parse_commit, parse_signature, parse_tag, parse_tree, peel_tag,
+    read_loose_object, ObjectType,
 };
 
 /// Helper to write a zlib-compressed loose object into `<repo>/objects/xx/xxx`.
@@ -137,7 +137,10 @@ fn test_annotated_tag_parsing_and_peeling() -> Result<(), Box<dyn std::error::Er
     assert_eq!(parsed.name, "v1.0.0");
     assert_eq!(parsed.target, commit_sha);
     assert_eq!(parsed.target_type, "commit");
-    assert_eq!(parsed.tagger.as_ref().map(|t| t.name.as_str()), Some("Release Mgr"));
+    assert_eq!(
+        parsed.tagger.as_ref().map(|t| t.name.as_str()),
+        Some("Release Mgr")
+    );
     assert_eq!(parsed.message.as_deref(), Some("Release version 1.0.0"));
 
     // Test peeling
@@ -155,14 +158,20 @@ fn test_corrupted_loose_objects_return_typed_errors() -> Result<(), Box<dyn std:
     let sha_corrupt_zlib = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     let dir_a = repo_path.join("objects/aa");
     fs::create_dir_all(&dir_a)?;
-    fs::write(dir_a.join(&sha_corrupt_zlib[2..]), b"not valid zlib compressed data")?;
+    fs::write(
+        dir_a.join(&sha_corrupt_zlib[2..]),
+        b"not valid zlib compressed data",
+    )?;
 
     let res = read_loose_object(repo_path, sha_corrupt_zlib);
     assert!(matches!(res, Err(SendforgeError::Decompression(_))));
 
     let sha_missing = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
     let res_missing = read_loose_object(repo_path, sha_missing);
-    assert!(matches!(res_missing, Err(SendforgeError::ObjectNotFound(_))));
+    assert!(matches!(
+        res_missing,
+        Err(SendforgeError::ObjectNotFound(_))
+    ));
 
     Ok(())
 }

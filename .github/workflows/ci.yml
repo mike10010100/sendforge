@@ -1,0 +1,59 @@
+name: CI Test & Quality Gates
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  rust-check:
+    name: Rust Quality & Test Gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Rustfmt Check
+        run: cargo fmt --all --check
+
+      - name: Clippy Deny-Warnings Gate
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Cargo Unit & Integration Tests
+        run: cargo test --all-targets --all-features
+
+  ts-check:
+    name: TypeScript & Frontend Test Gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Typecheck (tsc --noEmit)
+        run: npm run typecheck
+
+      - name: Strict Lint (ESLint)
+        run: npm run lint
+
+      - name: Vitest Unit & Integration Tests
+        run: npm test
+
+      - name: Vite Production Build
+        run: npm run build

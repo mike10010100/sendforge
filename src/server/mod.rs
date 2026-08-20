@@ -72,7 +72,11 @@ pub fn percent_decode(input: &str) -> String {
 /// Returns `SendforgeError::PathTraversal` if directory traversal is detected.
 pub fn sanitize_path(root_dir: &Path, raw_path: &str) -> Result<PathBuf> {
     let decoded = percent_decode(raw_path);
-    let trimmed = decoded.split('?').next().unwrap_or("").trim_start_matches('/');
+    let trimmed = decoded
+        .split('?')
+        .next()
+        .unwrap_or("")
+        .trim_start_matches('/');
 
     let mut resolved = root_dir.to_path_buf();
     for segment in trimmed.split('/') {
@@ -185,7 +189,11 @@ fn send_full_content(stream: &mut TcpStream, mut file: File, headers: &str, is_g
 fn resolve_candidate_file(root_dir: &Path, uri: &str, spa: bool) -> Result<Option<PathBuf>> {
     let target_path = sanitize_path(root_dir, uri)?;
     let decoded = percent_decode(uri);
-    let trimmed_path = decoded.split('?').next().unwrap_or("").trim_start_matches('/');
+    let trimmed_path = decoded
+        .split('?')
+        .next()
+        .unwrap_or("")
+        .trim_start_matches('/');
 
     // Candidate 1: Direct path in root_dir
     let mut candidate = target_path;
@@ -223,7 +231,9 @@ fn resolve_candidate_file(root_dir: &Path, uri: &str, spa: bool) -> Result<Optio
                     }
                     if sub_candidate.is_file() {
                         candidate = sub_candidate;
-                    } else if let Ok(sub_static_path) = sanitize_path(&root_dir.join("static"), subpath) {
+                    } else if let Ok(sub_static_path) =
+                        sanitize_path(&root_dir.join("static"), subpath)
+                    {
                         let mut sub_static_candidate = sub_static_path;
                         if sub_static_candidate.is_dir() {
                             sub_static_candidate = sub_static_candidate.join("index.html");
@@ -362,12 +372,22 @@ fn send_404(stream: &mut TcpStream, cors: &str) {
 pub fn run_server(serve_dir: &Path, options: &ServerOptions) -> Result<()> {
     let addr = format!("{}:{}", options.host, options.port);
     let listener = TcpListener::bind(&addr)?;
-    let root_path = Arc::new(serve_dir.canonicalize().unwrap_or_else(|_| serve_dir.to_path_buf()));
+    let root_path = Arc::new(
+        serve_dir
+            .canonicalize()
+            .unwrap_or_else(|_| serve_dir.to_path_buf()),
+    );
     let opts = Arc::new(options.clone());
 
-    eprintln!("[sendforge serve] Serving static files from: {}", root_path.display());
+    eprintln!(
+        "[sendforge serve] Serving static files from: {}",
+        root_path.display()
+    );
     eprintln!("[sendforge serve] Listening on http://{addr}");
-    eprintln!("[sendforge serve] CORS: {}, SPA Fallback: {}", options.cors, options.spa);
+    eprintln!(
+        "[sendforge serve] CORS: {}, SPA Fallback: {}",
+        options.cors, options.spa
+    );
 
     for stream_res in listener.incoming() {
         match stream_res {

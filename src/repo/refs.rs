@@ -224,9 +224,10 @@ pub fn atomic_write_file(path: &Path, content: &[u8]) -> Result<()> {
         fs::create_dir_all(parent)?;
     }
 
-    let file_name = path
-        .file_name()
-        .map_or_else(|| "temp.tmp".to_string(), |f| format!("{}.tmp", f.to_string_lossy()));
+    let file_name = path.file_name().map_or_else(
+        || "temp.tmp".to_string(),
+        |f| format!("{}.tmp", f.to_string_lossy()),
+    );
     let tmp_path = path.with_file_name(file_name);
 
     {
@@ -268,7 +269,10 @@ pub fn update_server_info(repo_path: &Path) -> Result<()> {
         for entry_res in fs::read_dir(&packs_dir)? {
             let entry = entry_res?;
             let path = entry.path();
-            if path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("pack")) {
+            if path
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("pack"))
+            {
                 let file_name = entry.file_name().to_string_lossy().into_owned();
                 pack_files.push(file_name);
             }

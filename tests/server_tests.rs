@@ -50,7 +50,10 @@ fn test_byte_range_resolution() {
 
     // 6. Unsatisfiable: start >= total
     assert_eq!(resolve_byte_range(ByteRange::From(10_000), total), None);
-    assert_eq!(resolve_byte_range(ByteRange::FromTo(10_000, 11_000), total), None);
+    assert_eq!(
+        resolve_byte_range(ByteRange::FromTo(10_000, 11_000), total),
+        None
+    );
 
     // 7. Empty file (0 bytes)
     assert_eq!(resolve_byte_range(ByteRange::FromTo(0, 0), 0), None);
@@ -81,10 +84,7 @@ fn test_mime_type_dispatch() {
         "application/x-git-loose-object"
     );
     assert_eq!(
-        determine_mime_type(
-            "/objects/pack/pack-123.pack",
-            Path::new("pack-123.pack")
-        ),
+        determine_mime_type("/objects/pack/pack-123.pack", Path::new("pack-123.pack")),
         "application/x-git-packed-objects"
     );
     assert_eq!(

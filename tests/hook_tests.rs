@@ -1,10 +1,10 @@
 //! Integration tests for post-receive hook handler and metadata generation.
 
+use flate2::write::ZlibEncoder;
+use flate2::Compression;
 use std::fs;
 use std::io::Cursor;
 use std::io::Write;
-use flate2::write::ZlibEncoder;
-use flate2::Compression;
 use tempfile::tempdir;
 
 use sendforge::hook::{parse_ref_updates, run_hook_update};
@@ -45,12 +45,24 @@ fn test_parse_ref_updates_stdin() -> Result<(), Box<dyn std::error::Error>> {
 
     assert_eq!(updates.len(), 2);
     assert_eq!(updates[0].ref_name, "refs/heads/main");
-    assert_eq!(updates[0].old_rev, "0000000000000000000000000000000000000000");
-    assert_eq!(updates[0].new_rev, "1111111111111111111111111111111111111111");
+    assert_eq!(
+        updates[0].old_rev,
+        "0000000000000000000000000000000000000000"
+    );
+    assert_eq!(
+        updates[0].new_rev,
+        "1111111111111111111111111111111111111111"
+    );
 
     assert_eq!(updates[1].ref_name, "refs/heads/feature");
-    assert_eq!(updates[1].old_rev, "2222222222222222222222222222222222222222");
-    assert_eq!(updates[1].new_rev, "3333333333333333333333333333333333333333");
+    assert_eq!(
+        updates[1].old_rev,
+        "2222222222222222222222222222222222222222"
+    );
+    assert_eq!(
+        updates[1].new_rev,
+        "3333333333333333333333333333333333333333"
+    );
 
     Ok(())
 }

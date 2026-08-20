@@ -146,10 +146,7 @@ pub fn read_loose_object(repo_path: &Path, sha: &str) -> Result<RawObject> {
         )));
     }
 
-    let obj_path = repo_path
-        .join("objects")
-        .join(&sha[..2])
-        .join(&sha[2..]);
+    let obj_path = repo_path.join("objects").join(&sha[..2]).join(&sha[2..]);
 
     if !obj_path.is_file() {
         return Err(SendforgeError::ObjectNotFound(sha.to_string()));
@@ -180,10 +177,9 @@ pub fn decompress_raw_object(compressed_bytes: &[u8], sha_for_context: &str) -> 
 /// # Errors
 /// Returns `SendforgeError::InvalidObject` if header delimiter or fields are missing.
 pub fn parse_raw_object_bytes(decompressed: &[u8]) -> Result<RawObject> {
-    let null_pos = decompressed
-        .iter()
-        .position(|&b| b == 0)
-        .ok_or_else(|| SendforgeError::InvalidObject("Missing null byte in object header".into()))?;
+    let null_pos = decompressed.iter().position(|&b| b == 0).ok_or_else(|| {
+        SendforgeError::InvalidObject("Missing null byte in object header".into())
+    })?;
 
     let header_str = std::str::from_utf8(&decompressed[..null_pos])
         .map_err(|e| SendforgeError::InvalidObject(format!("Invalid object header UTF-8: {e}")))?;
@@ -226,12 +222,12 @@ pub fn compute_object_sha(obj_type: ObjectType, data: &[u8]) -> String {
 /// # Errors
 /// Returns `SendforgeError::InvalidObject` if signature syntax is completely broken.
 pub fn parse_signature(line: &str) -> Result<CommitSignature> {
-    let open_bracket = line.find('<').ok_or_else(|| {
-        SendforgeError::InvalidObject(format!("Signature missing '<': {line}"))
-    })?;
-    let close_bracket = line.find('>').ok_or_else(|| {
-        SendforgeError::InvalidObject(format!("Signature missing '>': {line}"))
-    })?;
+    let open_bracket = line
+        .find('<')
+        .ok_or_else(|| SendforgeError::InvalidObject(format!("Signature missing '<': {line}")))?;
+    let close_bracket = line
+        .find('>')
+        .ok_or_else(|| SendforgeError::InvalidObject(format!("Signature missing '>': {line}")))?;
 
     if close_bracket < open_bracket {
         return Err(SendforgeError::InvalidObject(format!(
@@ -363,14 +359,11 @@ pub fn parse_tree(data: &[u8]) -> Result<Vec<TreeEntry>> {
             .iter()
             .position(|&b| b == b' ')
             .map(|p| offset + p)
-            .ok_or_else(|| {
-                SendforgeError::InvalidObject("Missing space in tree entry".into())
-            })?;
+            .ok_or_else(|| SendforgeError::InvalidObject("Missing space in tree entry".into()))?;
 
         let mode_bytes = &data[offset..space_pos];
-        let mode = std::str::from_utf8(mode_bytes).map_err(|e| {
-            SendforgeError::InvalidObject(format!("Invalid tree mode UTF-8: {e}"))
-        })?;
+        let mode = std::str::from_utf8(mode_bytes)
+            .map_err(|e| SendforgeError::InvalidObject(format!("Invalid tree mode UTF-8: {e}")))?;
 
         let null_pos = data[space_pos + 1..]
             .iter()

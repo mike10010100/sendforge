@@ -150,7 +150,11 @@ fn read_repo_config(repo_path: &Path) -> ParsedRepoConfig {
     parsed
 }
 
-fn collect_branches(repo_path: &Path, all_refs: &BTreeMap<String, RefEntry>, default_branch: &str) -> Vec<BranchMeta> {
+fn collect_branches(
+    repo_path: &Path,
+    all_refs: &BTreeMap<String, RefEntry>,
+    default_branch: &str,
+) -> Vec<BranchMeta> {
     let mut branches = Vec::new();
     for (ref_name, entry) in all_refs {
         if let Some(branch_name) = ref_name.strip_prefix("refs/heads/") {
@@ -238,7 +242,9 @@ fn resolve_default_branch_details(
             if let Ok(commit) = parse_commit(sha, &raw.data) {
                 if let Ok(tree_entries) = load_commit_tree(repo_path, &commit.tree) {
                     details.file_count = tree_entries.iter().filter(|e| !e.is_dir).count();
-                    if let Ok(Some((readme_name, _))) = find_readme_in_tree(repo_path, &tree_entries) {
+                    if let Ok(Some((readme_name, _))) =
+                        find_readme_in_tree(repo_path, &tree_entries)
+                    {
                         details.has_readme = true;
                         details.readme_filename = Some(readme_name);
                     }
@@ -275,7 +281,9 @@ pub fn generate_repo_metadata(
         .and_then(|o| o.description.clone())
         .or_else(|| {
             let desc_path = repo_path.join("description");
-            fs::read_to_string(desc_path).ok().map(|s| s.trim().to_string())
+            fs::read_to_string(desc_path)
+                .ok()
+                .map(|s| s.trim().to_string())
         })
         .filter(|s| !s.is_empty());
 
@@ -292,7 +300,9 @@ pub fn generate_repo_metadata(
     let all_refs = discover_all_refs(repo_path)?;
     let head_info = read_head(repo_path).ok();
     let default_branch = match head_info {
-        Some(HeadPointer::Symbolic { ref branch_name, .. }) => branch_name.clone(),
+        Some(HeadPointer::Symbolic {
+            ref branch_name, ..
+        }) => branch_name.clone(),
         _ => options
             .and_then(|o| o.default_branch.clone())
             .unwrap_or_else(|| "main".to_string()),

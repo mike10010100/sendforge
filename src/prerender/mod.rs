@@ -1,7 +1,7 @@
 //! Zero-JS HTML pre-rendering engine and `CommonMark` markdown renderer.
 
-use std::fmt::Write as _;
 use pulldown_cmark::{html, CowStr, Event, Options, Parser, Tag};
+use std::fmt::Write as _;
 
 use crate::meta::SendforgeRepoMeta;
 use crate::repo::objects::{CommitObject, TreeEntry};
@@ -36,20 +36,15 @@ pub fn render_markdown(markdown_text: &str) -> String {
     let parser = Parser::new_ext(markdown_text, options);
     let sanitized_events = parser.map(|event| match event {
         Event::Html(text) => Event::Html(CowStr::Boxed(escape_html(&text).into_boxed_str())),
-        Event::InlineHtml(text) => Event::InlineHtml(CowStr::Boxed(escape_html(&text).into_boxed_str())),
-        Event::Start(Tag::Link { link_type, dest_url, title, id }) => {
-            let lower = dest_url.trim_start().to_ascii_lowercase();
-            let safe_url = if lower.starts_with("javascript:")
-                || lower.starts_with("vbscript:")
-                || lower.starts_with("data:text/html")
-            {
-                CowStr::Borrowed("#")
-            } else {
-                dest_url
-            };
-            Event::Start(Tag::Link { link_type, dest_url: safe_url, title, id })
+        Event::InlineHtml(text) => {
+            Event::InlineHtml(CowStr::Boxed(escape_html(&text).into_boxed_str()))
         }
-        Event::Start(Tag::Image { link_type, dest_url, title, id }) => {
+        Event::Start(Tag::Link {
+            link_type,
+            dest_url,
+            title,
+            id,
+        }) => {
             let lower = dest_url.trim_start().to_ascii_lowercase();
             let safe_url = if lower.starts_with("javascript:")
                 || lower.starts_with("vbscript:")
@@ -59,7 +54,34 @@ pub fn render_markdown(markdown_text: &str) -> String {
             } else {
                 dest_url
             };
-            Event::Start(Tag::Image { link_type, dest_url: safe_url, title, id })
+            Event::Start(Tag::Link {
+                link_type,
+                dest_url: safe_url,
+                title,
+                id,
+            })
+        }
+        Event::Start(Tag::Image {
+            link_type,
+            dest_url,
+            title,
+            id,
+        }) => {
+            let lower = dest_url.trim_start().to_ascii_lowercase();
+            let safe_url = if lower.starts_with("javascript:")
+                || lower.starts_with("vbscript:")
+                || lower.starts_with("data:text/html")
+            {
+                CowStr::Borrowed("#")
+            } else {
+                dest_url
+            };
+            Event::Start(Tag::Image {
+                link_type,
+                dest_url: safe_url,
+                title,
+                id,
+            })
         }
         other => other,
     });
@@ -167,9 +189,7 @@ pub fn render_index_html(
     let clone_box_html = if clone_url.is_empty() {
         String::new()
     } else {
-        format!(
-            r#"<div class="clone-box"><code>git clone {clone_url_esc}</code></div>"#
-        )
+        format!(r#"<div class="clone-box"><code>git clone {clone_url_esc}</code></div>"#)
     };
 
     let latest_commit_html = build_latest_commit_section(meta);
@@ -245,7 +265,8 @@ pub fn render_log_html(meta: &SendforgeRepoMeta, commits: &[CommitObject]) -> St
     let updated_at_esc = escape_html(&meta.updated_at);
 
     let commit_items = if commits.is_empty() {
-        r#"        <li class="commit-item empty-commits"><p>No commits recorded yet.</p></li>"#.to_string()
+        r#"        <li class="commit-item empty-commits"><p>No commits recorded yet.</p></li>"#
+            .to_string()
     } else {
         let mut list_html = String::new();
         for commit in commits {

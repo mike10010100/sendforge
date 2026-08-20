@@ -36,9 +36,7 @@ pub struct InitOptions {
 /// Checks if a given directory appears to be a bare Git repository.
 #[must_use]
 pub fn is_bare_repo(path: &Path) -> bool {
-    path.join("HEAD").is_file()
-        && path.join("objects").is_dir()
-        && path.join("refs").is_dir()
+    path.join("HEAD").is_file() && path.join("objects").is_dir() && path.join("refs").is_dir()
 }
 
 /// Derives a clean repository name from its path.
@@ -76,11 +74,7 @@ pub fn init_bare_repo(path: &Path, options: &InitOptions) -> Result<()> {
     fs::create_dir_all(path.join("hooks"))?;
     fs::create_dir_all(path.join("static"))?;
 
-    let default_branch = options
-        .default_branch
-        .as_deref()
-        .unwrap_or("main")
-        .trim();
+    let default_branch = options.default_branch.as_deref().unwrap_or("main").trim();
     let default_branch = if default_branch.is_empty() {
         "main"
     } else {
@@ -120,11 +114,17 @@ pub fn init_bare_repo(path: &Path, options: &InitOptions) -> Result<()> {
 
     // 4. Write description
     let description = options.description.as_deref().unwrap_or("");
-    atomic_write_file(&path.join("description"), format!("{description}\n").as_bytes())?;
+    atomic_write_file(
+        &path.join("description"),
+        format!("{description}\n").as_bytes(),
+    )?;
 
     // 5. Write info/exclude
     let exclude_content = "# git ls-files --others --exclude-from=.git/info/exclude\n";
-    atomic_write_file(&path.join("info").join("exclude"), exclude_content.as_bytes())?;
+    atomic_write_file(
+        &path.join("info").join("exclude"),
+        exclude_content.as_bytes(),
+    )?;
 
     // 6. Write post-receive hook script
     let hook_path = path.join("hooks").join("post-receive");

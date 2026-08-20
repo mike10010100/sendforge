@@ -184,9 +184,13 @@ fn main() -> anyhow::Result<()> {
                 clone_url,
                 force,
             };
-            init_bare_repo(&path, &options)
-                .with_context(|| format!("Failed to initialize bare repository at {}", path.display()))?;
-            eprintln!("[sendforge] Initialized bare repository at {}", path.display());
+            init_bare_repo(&path, &options).with_context(|| {
+                format!("Failed to initialize bare repository at {}", path.display())
+            })?;
+            eprintln!(
+                "[sendforge] Initialized bare repository at {}",
+                path.display()
+            );
         }
 
         Commands::Hook {
@@ -195,8 +199,12 @@ fn main() -> anyhow::Result<()> {
             quiet,
         } => {
             let repo_path = resolve_repo_path(repo)?;
-            handle_post_receive_stdin(&repo_path, output.as_deref(), quiet)
-                .with_context(|| format!("Failed to execute post-receive hook for {}", repo_path.display()))?;
+            handle_post_receive_stdin(&repo_path, output.as_deref(), quiet).with_context(|| {
+                format!(
+                    "Failed to execute post-receive hook for {}",
+                    repo_path.display()
+                )
+            })?;
         }
 
         Commands::Update {
@@ -220,8 +228,9 @@ fn main() -> anyhow::Result<()> {
                 base_url,
                 no_objects,
             };
-            export_static_site(&repo_path, &output_dir, &options)
-                .with_context(|| format!("Failed to export static site to {}", output_dir.display()))?;
+            export_static_site(&repo_path, &output_dir, &options).with_context(|| {
+                format!("Failed to export static site to {}", output_dir.display())
+            })?;
             eprintln!(
                 "[sendforge] Successfully exported static site to {}",
                 output_dir.display()
@@ -242,8 +251,9 @@ fn main() -> anyhow::Result<()> {
                 cors,
                 spa,
             };
-            run_server(&target_dir, &options)
-                .with_context(|| format!("Static HTTP server error serving {}", target_dir.display()))?;
+            run_server(&target_dir, &options).with_context(|| {
+                format!("Static HTTP server error serving {}", target_dir.display())
+            })?;
         }
     }
 

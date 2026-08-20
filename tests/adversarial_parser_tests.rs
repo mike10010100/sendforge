@@ -10,10 +10,10 @@
 //! 7. Clock-warp timestamps (future timestamps, negative timezone offsets, leap seconds)
 //! 8. Tag peeling cycles and boundary conditions
 
-use std::fs;
-use std::io::Write;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
+use std::fs;
+use std::io::Write;
 use tempfile::tempdir;
 
 use sendforge::error::SendforgeError;
@@ -24,7 +24,9 @@ use sendforge::repo::objects::{
     compute_object_sha, decompress_raw_object, parse_commit, parse_raw_object_bytes,
     parse_signature, parse_tree, peel_tag, read_loose_object, ObjectType,
 };
-use sendforge::repo::refs::{discover_all_refs, read_head, resolve_head_commit, update_server_info, HeadPointer};
+use sendforge::repo::refs::{
+    discover_all_refs, read_head, resolve_head_commit, update_server_info, HeadPointer,
+};
 use sendforge::repo::{load_commit_history, load_commit_tree, InitOptions};
 
 /// Helper to write a zlib-compressed loose object into `<repo>/objects/xx/xxx`.
@@ -73,7 +75,8 @@ fn test_adversarial_corrupted_zlib_streams() {
 
     // Valid zlib stream but payload is not a valid Git object header (no null byte) -> InvalidObject
     let mut enc = ZlibEncoder::new(Vec::new(), Compression::default());
-    enc.write_all(b"not a valid git header without null byte").unwrap();
+    enc.write_all(b"not a valid git header without null byte")
+        .unwrap();
     let valid_zlib_non_git = enc.finish().unwrap();
     let res_non_git = decompress_raw_object(&valid_zlib_non_git, "fake_sha");
     assert!(matches!(res_non_git, Err(SendforgeError::InvalidObject(_))));
@@ -206,7 +209,8 @@ fn test_adversarial_truncated_tree_records() {
 // =========================================================================
 
 #[test]
-fn test_adversarial_empty_repository_and_zero_byte_blob() -> Result<(), Box<dyn std::error::Error>> {
+fn test_adversarial_empty_repository_and_zero_byte_blob() -> Result<(), Box<dyn std::error::Error>>
+{
     let dir = tempdir()?;
     let repo_path = dir.path();
 
@@ -286,7 +290,8 @@ fn test_adversarial_deeply_nested_trees() -> Result<(), Box<dyn std::error::Erro
     let repo_path = dir.path();
 
     // 1. Create a chain of 60 nested tree objects
-    let leaf_blob_sha = write_loose_object_raw(repo_path, ObjectType::Blob, b"deep content in level 60")?;
+    let leaf_blob_sha =
+        write_loose_object_raw(repo_path, ObjectType::Blob, b"deep content in level 60")?;
     let mut current_tree_target_sha = leaf_blob_sha;
     let mut is_leaf = true;
 
@@ -318,7 +323,8 @@ fn test_adversarial_deeply_nested_trees() -> Result<(), Box<dyn std::error::Erro
 // =========================================================================
 
 #[test]
-fn test_adversarial_unicode_emoji_and_special_filenames() -> Result<(), Box<dyn std::error::Error>> {
+fn test_adversarial_unicode_emoji_and_special_filenames() -> Result<(), Box<dyn std::error::Error>>
+{
     let special_names = vec![
         "🦀.rs",
         "🚀_rocket.ts",
@@ -334,7 +340,11 @@ fn test_adversarial_unicode_emoji_and_special_filenames() -> Result<(), Box<dyn 
 
     let mut tree_payload = Vec::new();
     for (i, name) in special_names.iter().enumerate() {
-        let mode = if name.contains('/') { "040000" } else { "100644" };
+        let mode = if name.contains('/') {
+            "040000"
+        } else {
+            "100644"
+        };
         tree_payload.extend_from_slice(format!("{mode} {name}\0").as_bytes());
         tree_payload.extend_from_slice(&[(i as u8) + 1; 20]);
     }
@@ -398,7 +408,8 @@ fn test_adversarial_octopus_merges_and_commit_headers() -> Result<(), Box<dyn st
         "tree {tree_sha}\nparent {}\nauthor Signer <s@s.com> 1700000000 +0000\ncommitter Signer <s@s.com> 1700000000 +0000\ngpgsig -----BEGIN PGP SIGNATURE-----\n Version: BCPG v1.68\n \n wsBcBAABCAAQBQJ...\n -----END PGP SIGNATURE-----\n\nCommit with signature",
         parents[0]
     );
-    let signed_sha = write_loose_object_raw(repo_path, ObjectType::Commit, signed_commit.as_bytes())?;
+    let signed_sha =
+        write_loose_object_raw(repo_path, ObjectType::Commit, signed_commit.as_bytes())?;
     let signed_raw = read_loose_object(repo_path, &signed_sha)?;
     let parsed_signed = parse_commit(&signed_sha, &signed_raw.data)?;
     assert_eq!(parsed_signed.summary, "Commit with signature");
@@ -438,11 +449,17 @@ fn test_adversarial_clock_warp_and_timezone_parsing() -> Result<(), Box<dyn std:
 
     // 5. Signature without email brackets (returns Error)
     let sig_no_brackets = parse_signature("Just A Name 1700000000 +0000");
-    assert!(matches!(sig_no_brackets, Err(SendforgeError::InvalidObject(_))));
+    assert!(matches!(
+        sig_no_brackets,
+        Err(SendforgeError::InvalidObject(_))
+    ));
 
     // 6. Signature with mismatched brackets (returns Error)
     let sig_inverted = parse_signature("Mismatched >test@test.com< 1700000000 +0000");
-    assert!(matches!(sig_inverted, Err(SendforgeError::InvalidObject(_))));
+    assert!(matches!(
+        sig_inverted,
+        Err(SendforgeError::InvalidObject(_))
+    ));
 
     Ok(())
 }
@@ -473,7 +490,10 @@ fn test_adversarial_nested_annotated_tags_peeling() -> Result<(), Box<dyn std::e
 
     let top_tag_sha = current_target;
     let peeled = peel_tag(repo_path, &top_tag_sha)?;
-    assert_eq!(peeled, target_sha, "Nested annotated tag chain failed to peel to base commit");
+    assert_eq!(
+        peeled, target_sha,
+        "Nested annotated tag chain failed to peel to base commit"
+    );
 
     Ok(())
 }

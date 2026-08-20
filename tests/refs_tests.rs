@@ -52,11 +52,15 @@ fn test_loose_and_packed_refs_precedence() -> Result<(), Box<dyn std::error::Err
     let refs = discover_all_refs(repo_path)?;
 
     // Loose ref must override packed ref for 'refs/heads/main'
-    let main_ref = refs.get("refs/heads/main").expect("refs/heads/main must exist");
+    let main_ref = refs
+        .get("refs/heads/main")
+        .expect("refs/heads/main must exist");
     assert_eq!(main_ref.sha, loose_sha);
 
     // Packed ref for 'refs/heads/feature' must be preserved
-    let feat_ref = refs.get("refs/heads/feature").expect("refs/heads/feature must exist");
+    let feat_ref = refs
+        .get("refs/heads/feature")
+        .expect("refs/heads/feature must exist");
     assert_eq!(feat_ref.sha, "3333333333333333333333333333333333333333");
 
     Ok(())
@@ -73,8 +77,14 @@ fn test_update_server_info_generation() -> Result<(), Box<dyn std::error::Error>
     fs::create_dir_all(&heads_dir)?;
     fs::create_dir_all(&tags_dir)?;
 
-    fs::write(heads_dir.join("main"), b"4444444444444444444444444444444444444444\n")?;
-    fs::write(tags_dir.join("v1.0.0"), b"5555555555555555555555555555555555555555\n")?;
+    fs::write(
+        heads_dir.join("main"),
+        b"4444444444444444444444444444444444444444\n",
+    )?;
+    fs::write(
+        tags_dir.join("v1.0.0"),
+        b"5555555555555555555555555555555555555555\n",
+    )?;
 
     // 2. Setup packs
     let pack_dir = repo_path.join("objects/pack");
@@ -117,9 +127,11 @@ fn test_info_refs_peeled_annotated_tags() -> Result<(), Box<dyn std::error::Erro
     assert!(info_refs.contains(&expected_peeled_line));
     // Verify that NO line begins with ^ in info/refs (the Dumb HTTP spec requires peeled tags to start with SHA)
     for line in info_refs.lines() {
-        assert!(!line.starts_with('^'), "info/refs must not have lines starting with ^: {line}");
+        assert!(
+            !line.starts_with('^'),
+            "info/refs must not have lines starting with ^: {line}"
+        );
     }
 
     Ok(())
 }
-

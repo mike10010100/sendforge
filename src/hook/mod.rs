@@ -36,15 +36,15 @@ pub fn parse_ref_updates<R: BufRead>(reader: R) -> Result<Vec<RefUpdate>> {
         }
 
         let mut parts = trimmed.split_ascii_whitespace();
-        let old_rev = parts
-            .next()
-            .ok_or_else(|| SendforgeError::InvalidRef(format!("Missing old_rev in line: {trimmed}")))?;
-        let new_rev = parts
-            .next()
-            .ok_or_else(|| SendforgeError::InvalidRef(format!("Missing new_rev in line: {trimmed}")))?;
-        let ref_name = parts
-            .next()
-            .ok_or_else(|| SendforgeError::InvalidRef(format!("Missing ref_name in line: {trimmed}")))?;
+        let old_rev = parts.next().ok_or_else(|| {
+            SendforgeError::InvalidRef(format!("Missing old_rev in line: {trimmed}"))
+        })?;
+        let new_rev = parts.next().ok_or_else(|| {
+            SendforgeError::InvalidRef(format!("Missing new_rev in line: {trimmed}"))
+        })?;
+        let ref_name = parts.next().ok_or_else(|| {
+            SendforgeError::InvalidRef(format!("Missing ref_name in line: {trimmed}"))
+        })?;
 
         if old_rev.len() != 40 || new_rev.len() != 40 {
             return Err(SendforgeError::InvalidRef(format!(
@@ -68,11 +68,7 @@ pub fn parse_ref_updates<R: BufRead>(reader: R) -> Result<Vec<RefUpdate>> {
 ///
 /// # Errors
 /// Returns `SendforgeError` if any update step fails.
-pub fn run_hook_update(
-    repo_path: &Path,
-    output_dir: Option<&Path>,
-    quiet: bool,
-) -> Result<()> {
+pub fn run_hook_update(repo_path: &Path, output_dir: Option<&Path>, quiet: bool) -> Result<()> {
     if !quiet {
         eprintln!("[sendforge] Updating dumb HTTP refs and static fallbacks...");
     }
@@ -146,7 +142,12 @@ pub fn handle_post_receive_stdin(
     if !quiet && !updates.is_empty() {
         eprintln!("[sendforge] Received {} ref update(s):", updates.len());
         for u in &updates {
-            eprintln!("  {} -> {} ({})", &u.old_rev[..7], &u.new_rev[..7], u.ref_name);
+            eprintln!(
+                "  {} -> {} ({})",
+                &u.old_rev[..7],
+                &u.new_rev[..7],
+                u.ref_name
+            );
         }
     }
 
