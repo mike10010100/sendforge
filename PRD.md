@@ -117,16 +117,16 @@ flowchart TD
 - [x] **Git Push Integration:** `post-receive` hook updates `info/refs`, generates `meta.json`, and pre-renders static HTML fallbacks.
 - [x] **Static Deployment Support:** `sendforge export` bundles bare repos, static fallbacks, and the client SPA for zero-compute hosting on S3, Cloudflare Pages, Caddy, or Nginx.
 
-### 6.2 Phase 2: Enhanced Navigation & Refined UX
-- [ ] **Tabbed Ref Selector:** Separate Branches and Tags into dedicated tabbed selector panels with instantaneous filter/search instead of a combined dropdown.
-- [ ] **In-Browser `git blame`:** Client-side blame calculation tracing line origins across commit parent chains.
-- [ ] **Raw Blob Download & Archive Generation:** Client-side ZIP/tarball generation from Git tree objects.
-- [ ] **Line-Number Permalinks:** Highlight and share direct line links (`#L12-L34`) in the file viewer.
+### 6.2 Phase 2: Enhanced Navigation & Refined UX — COMPLETE ✅
+- [x] **Tabbed Ref Selector:** Separate Branches and Tags into dedicated tabbed selector panels with instantaneous filter/search instead of a combined dropdown.
+- [x] **In-Browser `git blame`:** Client-side blame calculation tracing line origins across commit parent chains.
+- [x] **Raw Blob Download & Archive Generation:** Client-side ZIP/tarball generation from Git tree objects.
+- [x] **Line-Number Permalinks:** Highlight and share direct line links (`#L12-L34`) in the file viewer.
 
-### 6.3 Phase 3: Git-Native Pull Requests & Issues
-- [ ] **`refs/pull/*` Patch & Pull Request Viewer:** Review patchsets submitted as Git refs with client-side 3-way merge base diff calculation.
-- [ ] **`git-bug` / Git-Ref Issue Viewer:** Client-side rendering of issue threads, labels, and status stored directly as Git references.
-- [ ] **Discussion / Review Comments:** Offline-first review notes stored in `refs/notes/reviews`.
+### 6.3 Phase 3: Git-Native Pull Requests & Issues — COMPLETE ✅
+- [x] **`refs/pull/*` Patch & Pull Request Viewer:** Review patchsets submitted as Git refs with client-side 3-way merge base diff calculation.
+- [x] **`git-bug` / Git-Ref Issue Viewer:** Client-side rendering of issue threads, labels, and status stored directly as Git references.
+- [x] **Discussion / Review Comments:** Offline-first review notes stored in `refs/notes/reviews`.
 
 ---
 
