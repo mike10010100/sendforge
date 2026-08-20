@@ -264,6 +264,18 @@ pub fn render_index_html(
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{repo_name_esc} - Sendforge</title>
   <meta name="description" content="{desc_esc}">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://www.sendforge.dev/">
+  <meta property="og:site_name" content="Sendforge">
+  <meta property="og:title" content="{repo_name_esc} — The Static-First Git Forge">
+  <meta property="og:description" content="{desc_esc}">
+  <meta property="og:image" content="https://www.sendforge.dev/og-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{repo_name_esc} — The Static-First Git Forge">
+  <meta name="twitter:description" content="{desc_esc}">
+  <meta name="twitter:image" content="https://www.sendforge.dev/og-card.png">
   <link rel="stylesheet" href="/style.css">
   <script type="module" src="/app.js"></script>
 </head>
@@ -353,6 +365,14 @@ pub fn render_log_html(meta: &SendforgeRepoMeta, commits: &[CommitObject]) -> St
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Commit History - {repo_name_esc} - Sendforge</title>
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://www.sendforge.dev/log.html">
+  <meta property="og:site_name" content="Sendforge">
+  <meta property="og:title" content="Commit History — {repo_name_esc}">
+  <meta property="og:image" content="https://www.sendforge.dev/og-card.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Commit History — {repo_name_esc}">
+  <meta name="twitter:image" content="https://www.sendforge.dev/og-card.png">
   <link rel="stylesheet" href="/style.css">
   <script type="module" src="/app.js"></script>
 </head>
@@ -474,6 +494,16 @@ pub fn render_pulls_html(meta: &SendforgeRepoMeta, pulls: &[PullRequest]) -> Str
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pull Requests - {repo_name_esc} - Sendforge</title>
   <meta name="description" content="{desc_esc}">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://www.sendforge.dev/pulls.html">
+  <meta property="og:site_name" content="Sendforge">
+  <meta property="og:title" content="Pull Requests — {repo_name_esc}">
+  <meta property="og:description" content="{desc_esc}">
+  <meta property="og:image" content="https://www.sendforge.dev/og-card.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Pull Requests — {repo_name_esc}">
+  <meta name="twitter:description" content="{desc_esc}">
+  <meta name="twitter:image" content="https://www.sendforge.dev/og-card.png">
   <link rel="stylesheet" href="/style.css">
   <script type="module" src="/app.js"></script>
 </head>
@@ -588,6 +618,16 @@ pub fn render_issues_html(meta: &SendforgeRepoMeta, issues: &[Issue]) -> String 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Issues - {repo_name_esc} - Sendforge</title>
   <meta name="description" content="{desc_esc}">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://www.sendforge.dev/issues.html">
+  <meta property="og:site_name" content="Sendforge">
+  <meta property="og:title" content="Issues — {repo_name_esc}">
+  <meta property="og:description" content="{desc_esc}">
+  <meta property="og:image" content="https://www.sendforge.dev/og-card.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Issues — {repo_name_esc}">
+  <meta name="twitter:description" content="{desc_esc}">
+  <meta name="twitter:image" content="https://www.sendforge.dev/og-card.png">
   <link rel="stylesheet" href="/style.css">
   <script type="module" src="/app.js"></script>
 </head>
@@ -685,6 +725,13 @@ pub fn render_pull_detail_html(meta: &SendforgeRepoMeta, pull: &PullRequest) -> 
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>#{number} {title_esc} - Pull Requests - {repo_name_esc} - Sendforge</title>
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Sendforge">
+  <meta property="og:title" content="PR #{number}: {title_esc} — {repo_name_esc}">
+  <meta property="og:image" content="https://www.sendforge.dev/og-card.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="PR #{number}: {title_esc} — {repo_name_esc}">
+  <meta name="twitter:image" content="https://www.sendforge.dev/og-card.png">
   <link rel="stylesheet" href="../style.css">
   <script type="module" src="../app.js"></script>
 </head>
@@ -767,6 +814,13 @@ pub fn render_issue_detail_html(meta: &SendforgeRepoMeta, issue: &Issue) -> Stri
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>#{number} {title_esc} - Issues - {repo_name_esc} - Sendforge</title>
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Sendforge">
+  <meta property="og:title" content="Issue #{number}: {title_esc} — {repo_name_esc}">
+  <meta property="og:image" content="https://www.sendforge.dev/og-card.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Issue #{number}: {title_esc} — {repo_name_esc}">
+  <meta name="twitter:image" content="https://www.sendforge.dev/og-card.png">
   <link rel="stylesheet" href="../style.css">
   <script type="module" src="../app.js"></script>
 </head>

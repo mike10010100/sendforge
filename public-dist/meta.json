@@ -7,42 +7,42 @@
   "branches": [
     {
       "name": "main",
-      "target": "391c7f72379a9fd84cc4f7c829dd82095a1ce0ab",
+      "target": "76b27f6794e0ed23cb8f358c45aef4f24a0324eb",
       "is_default": true,
-      "latest_commit_date": "2026-08-20T03:52:37Z"
+      "latest_commit_date": "2026-08-20T05:29:32Z"
     }
   ],
   "tags": [],
   "head": {
     "ref": "refs/heads/main",
-    "sha": "391c7f72379a9fd84cc4f7c829dd82095a1ce0ab"
+    "sha": "76b27f6794e0ed23cb8f358c45aef4f24a0324eb"
   },
   "latest_commit": {
-    "id": "391c7f72379a9fd84cc4f7c829dd82095a1ce0ab",
-    "short_id": "391c7f7",
-    "tree": "cec9b143f8cd675ebeeed362f04de5381aaa6a69",
+    "id": "76b27f6794e0ed23cb8f358c45aef4f24a0324eb",
+    "short_id": "76b27f6",
+    "tree": "769920d039b2d8426faef0e0da66a6cb498a7e87",
     "parents": [
-      "8208a0705592f524b829b0d0db0998f61acfcd97"
+      "391c7f72379a9fd84cc4f7c829dd82095a1ce0ab"
     ],
     "author": {
       "name": "Michael Paulauski",
       "email": "mike10010100@gmail.com",
-      "timestamp": 1787197957,
-      "date": "2026-08-20T03:52:37Z"
+      "timestamp": 1787203772,
+      "date": "2026-08-20T05:29:32Z"
     },
     "committer": {
       "name": "Michael Paulauski",
       "email": "mike10010100@gmail.com",
-      "timestamp": 1787197957,
-      "date": "2026-08-20T03:52:37Z"
+      "timestamp": 1787203772,
+      "date": "2026-08-20T05:29:32Z"
     },
-    "message": "feat(ui): integrate commit diffs directly under commits tab with back navigation",
-    "summary": "feat(ui): integrate commit diffs directly under commits tab with back navigation"
+    "message": "feat(phase3): complete git-native pull requests and issues with in-browser merge-base engine",
+    "summary": "feat(phase3): complete git-native pull requests and issues with in-browser merge-base engine"
   },
   "stats": {
     "branch_count": 1,
     "tag_count": 0,
-    "commit_count": 16,
+    "commit_count": 17,
     "file_count": 19,
     "pull_count": 0,
     "open_pull_count": 0,
@@ -51,5 +51,5 @@
   },
   "has_readme": true,
   "readme_filename": "README.md",
-  "updated_at": "2026-08-20T05:29:12Z"
+  "updated_at": "2026-08-20T14:05:20Z"
 }
