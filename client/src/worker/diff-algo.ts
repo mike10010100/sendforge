@@ -1,6 +1,5 @@
 import type { GitRepositoryClient } from '../engine/fetcher.js';
 import type { GitTreeEntry } from '../engine/types.js';
-import { diffClient } from './diff-client.js';
 import type {
   DiffBatchItemInput,
   DiffHunk,
@@ -883,7 +882,25 @@ export async function computeTreeFullDiff(
   }
 
   if (batchItems.length > 0) {
-    const computedDiffs = await diffClient.computeBatchDiff(batchItems, options);
+    const computedDiffs = batchItems.map((item) => {
+      const fd = computeFileDiff(
+        item.oldPath,
+        item.newPath,
+        item.oldContent,
+        item.newContent,
+        item.contextLines ?? options?.contextLines ?? 3,
+        item.isBinary ?? false
+      );
+      return {
+        ...fd,
+        ...(item.status !== undefined ? { status: item.status } : {}),
+        ...(item.oldOid !== undefined ? { oldOid: item.oldOid } : {}),
+        ...(item.newOid !== undefined ? { newOid: item.newOid } : {}),
+        ...(item.oldMode !== undefined ? { oldMode: item.oldMode } : {}),
+        ...(item.newMode !== undefined ? { newMode: item.newMode } : {}),
+        ...(item.modeChanged !== undefined ? { modeChanged: item.modeChanged } : {}),
+      };
+    });
     fileDiffs.push(...computedDiffs);
   }
 
