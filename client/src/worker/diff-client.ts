@@ -16,11 +16,13 @@ type PendingHandler =
       readonly type: 'SINGLE';
       readonly resolve: (diff: FileDiff) => void;
       readonly reject: (err: Error) => void;
+      readonly timer: ReturnType<typeof setTimeout>;
     }
   | {
       readonly type: 'BATCH';
       readonly resolve: (diffs: readonly FileDiff[]) => void;
       readonly reject: (err: Error) => void;
+      readonly timer: ReturnType<typeof setTimeout>;
     };
 
 export class DiffClient {
@@ -33,7 +35,12 @@ export class DiffClient {
   }
 
   private initWorker(): void {
-    if (typeof Worker !== 'undefined') {
+    // Only instantiate worker in main browser thread (never inside another worker or SSR)
+    if (
+      typeof window !== 'undefined' &&
+      typeof document !== 'undefined' &&
+      typeof Worker !== 'undefined'
+    ) {
       try {
         this.worker = new Worker(
           new URL('./diff.worker.ts', import.meta.url),
@@ -45,6 +52,7 @@ export class DiffClient {
           const handler = this.pendingRequests.get(res.id);
           if (!handler) return;
 
+          clearTimeout(handler.timer);
           this.pendingRequests.delete(res.id);
 
           if (res.type === 'DIFF_ERROR') {
@@ -69,6 +77,7 @@ export class DiffClient {
 
         this.worker.onerror = (err) => {
           for (const [id, handler] of this.pendingRequests.entries()) {
+            clearTimeout(handler.timer);
             handler.reject(new Error(`Worker error: ${err.message}`));
             this.pendingRequests.delete(id);
           }
@@ -80,7 +89,7 @@ export class DiffClient {
   }
 
   /**
-   * Computes a single file diff using the Web Worker, falling back to main-thread execution if unavailable.
+   * Computes a single file diff using the Web Worker with automatic timeout fallback.
    */
   public async computeDiff(
     oldPath: string | null,
@@ -100,7 +109,7 @@ export class DiffClient {
       );
     }
 
-    const id = `diff_req_${++this.requestIdCounter}_${Date.now()}`;
+    const id = `diff_req_${String(++this.requestIdCounter)}_${String(Date.now())}`;
     const req: DiffWorkerRequest = {
       id,
       type: 'COMPUTE_DIFF',
@@ -113,15 +122,41 @@ export class DiffClient {
     };
 
     return new Promise<FileDiff>((resolve, reject) => {
-      this.pendingRequests.set(id, { type: 'SINGLE', resolve, reject });
-      if (this.worker) {
-        this.worker.postMessage(req);
+      // 3-second safety timeout: fall back to main thread if worker hangs
+      const timer = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        const fallback = computeFileDiff(
+          oldPath,
+          newPath,
+          oldContent,
+          newContent,
+          options?.contextLines ?? 3,
+          options?.isBinary ?? false
+        );
+        resolve(fallback);
+      }, 3000);
+
+      this.pendingRequests.set(id, { type: 'SINGLE', resolve, reject, timer });
+      try {
+        this.worker?.postMessage(req);
+      } catch {
+        clearTimeout(timer);
+        this.pendingRequests.delete(id);
+        const fallback = computeFileDiff(
+          oldPath,
+          newPath,
+          oldContent,
+          newContent,
+          options?.contextLines ?? 3,
+          options?.isBinary ?? false
+        );
+        resolve(fallback);
       }
     });
   }
 
   /**
-   * Computes batch file diffs in the Web Worker, falling back to main-thread execution if unavailable.
+   * Computes batch file diffs in the Web Worker with automatic timeout fallback.
    */
   public async computeBatchDiff(
     items: readonly DiffBatchItemInput[],
@@ -131,7 +166,7 @@ export class DiffClient {
       return [];
     }
 
-    if (!this.worker) {
+    const fallbackCompute = () => {
       return items.map((item) => {
         const fd = computeFileDiff(
           item.oldPath,
@@ -151,9 +186,13 @@ export class DiffClient {
           ...(item.modeChanged !== undefined ? { modeChanged: item.modeChanged } : {}),
         };
       });
+    };
+
+    if (!this.worker) {
+      return fallbackCompute();
     }
 
-    const id = `batch_diff_req_${++this.requestIdCounter}_${Date.now()}`;
+    const id = `batch_diff_req_${String(++this.requestIdCounter)}_${String(Date.now())}`;
     const req: DiffWorkerRequest = {
       id,
       type: 'COMPUTE_BATCH_DIFF',
@@ -162,9 +201,18 @@ export class DiffClient {
     };
 
     return new Promise<readonly FileDiff[]>((resolve, reject) => {
-      this.pendingRequests.set(id, { type: 'BATCH', resolve, reject });
-      if (this.worker) {
-        this.worker.postMessage(req);
+      const timer = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        resolve(fallbackCompute());
+      }, 3000);
+
+      this.pendingRequests.set(id, { type: 'BATCH', resolve, reject, timer });
+      try {
+        this.worker?.postMessage(req);
+      } catch {
+        clearTimeout(timer);
+        this.pendingRequests.delete(id);
+        resolve(fallbackCompute());
       }
     });
   }
@@ -173,6 +221,9 @@ export class DiffClient {
     if (this.worker) {
       this.worker.terminate();
       this.worker = null;
+    }
+    for (const handler of this.pendingRequests.values()) {
+      clearTimeout(handler.timer);
     }
     this.pendingRequests.clear();
   }

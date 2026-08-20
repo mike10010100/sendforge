@@ -567,6 +567,24 @@ export function computeFileDiff(
   };
 }
 
+const BINARY_EXTENSIONS = new Set([
+  'png', 'jpg', 'jpeg', 'gif', 'ico', 'webp', 'bmp', 'tiff', 'svgz',
+  'pdf', 'zip', 'tar', 'gz', 'bz2', 'xz', '7z', 'rar', 'zst',
+  'exe', 'dll', 'so', 'dylib', 'bin', 'iso', 'img', 'wasm',
+  'woff', 'woff2', 'ttf', 'eot', 'otf',
+  'mp3', 'mp4', 'm4a', 'ogg', 'wav', 'flac', 'webm', 'mov', 'mkv',
+  'pyc', 'pyo', 'pyd', 'class', 'o', 'a', 'lib', 'lock',
+]);
+
+export function isBinaryPath(path: string | null): boolean {
+  if (!path) return false;
+  if (path.includes('/objects/') || path.startsWith('objects/')) return true;
+  const dotIndex = path.lastIndexOf('.');
+  if (dotIndex === -1) return false;
+  const ext = path.slice(dotIndex + 1).toLowerCase();
+  return BINARY_EXTENSIONS.has(ext);
+}
+
 /**
  * Recursively computes the file-level difference between two Git commit trees.
  * Identifies added ('added'), deleted ('deleted'), and modified ('modified') files,
@@ -645,14 +663,6 @@ export async function computeTreeDiff(
         if (hEntry.isTree) {
           await walk(null, hEntry.oid, currentPath);
         } else {
-          let isBinary = false;
-          try {
-            const blob = await client.getBlob(hEntry.oid);
-            isBinary = blob.isBinary;
-          } catch {
-            isBinary = false;
-          }
-
           results.push({
             status: 'added',
             oldPath: null,
@@ -661,7 +671,7 @@ export async function computeTreeDiff(
             newOid: hEntry.oid,
             oldMode: null,
             newMode: hEntry.mode,
-            isBinary,
+            isBinary: isBinaryPath(currentPath),
           });
         }
       } else if (bEntry && !hEntry) {
@@ -669,14 +679,6 @@ export async function computeTreeDiff(
         if (bEntry.isTree) {
           await walk(bEntry.oid, null, currentPath);
         } else {
-          let isBinary = false;
-          try {
-            const blob = await client.getBlob(bEntry.oid);
-            isBinary = blob.isBinary;
-          } catch {
-            isBinary = false;
-          }
-
           results.push({
             status: 'deleted',
             oldPath: currentPath,
@@ -685,7 +687,7 @@ export async function computeTreeDiff(
             newOid: null,
             oldMode: bEntry.mode,
             newMode: null,
-            isBinary,
+            isBinary: isBinaryPath(currentPath),
           });
         }
       } else if (bEntry && hEntry) {
@@ -696,15 +698,6 @@ export async function computeTreeDiff(
           }
         } else if (!bEntry.isTree && !hEntry.isTree) {
           if (bEntry.oid !== hEntry.oid || bEntry.mode !== hEntry.mode) {
-            let isBinary = false;
-            try {
-              const bBlob = await client.getBlob(bEntry.oid);
-              const hBlob = await client.getBlob(hEntry.oid);
-              isBinary = bBlob.isBinary || hBlob.isBinary;
-            } catch {
-              isBinary = false;
-            }
-
             const modeChanged = bEntry.mode !== hEntry.mode;
             results.push({
               status: 'modified',
@@ -715,7 +708,7 @@ export async function computeTreeDiff(
               oldMode: bEntry.mode,
               newMode: hEntry.mode,
               modeChanged,
-              isBinary,
+              isBinary: isBinaryPath(currentPath),
             });
           }
         } else {
@@ -723,13 +716,6 @@ export async function computeTreeDiff(
           if (bEntry.isTree) {
             await walk(bEntry.oid, null, currentPath);
           } else {
-            let isBinary = false;
-            try {
-              const blob = await client.getBlob(bEntry.oid);
-              isBinary = blob.isBinary;
-            } catch {
-              isBinary = false;
-            }
             results.push({
               status: 'deleted',
               oldPath: currentPath,
@@ -738,20 +724,13 @@ export async function computeTreeDiff(
               newOid: null,
               oldMode: bEntry.mode,
               newMode: null,
-              isBinary,
+              isBinary: isBinaryPath(currentPath),
             });
           }
 
           if (hEntry.isTree) {
             await walk(null, hEntry.oid, currentPath);
           } else {
-            let isBinary = false;
-            try {
-              const blob = await client.getBlob(hEntry.oid);
-              isBinary = blob.isBinary;
-            } catch {
-              isBinary = false;
-            }
             results.push({
               status: 'added',
               oldPath: null,
@@ -760,7 +739,7 @@ export async function computeTreeDiff(
               newOid: hEntry.oid,
               oldMode: null,
               newMode: hEntry.mode,
-              isBinary,
+              isBinary: isBinaryPath(currentPath),
             });
           }
         }
@@ -788,9 +767,11 @@ export async function computeTreeFullDiff(
 
   const batchItems: DiffBatchItemInput[] = [];
   const fileDiffs: FileDiff[] = [];
+  const MAX_CONCURRENT_BLOB_FETCHES = 12;
+  const fetchTasks: (() => Promise<void>)[] = [];
 
   for (const sum of summaries) {
-    if (sum.isBinary) {
+    if (sum.isBinary || isBinaryPath(sum.newPath ?? sum.oldPath)) {
       fileDiffs.push({
         status: sum.status,
         oldPath: sum.oldPath,
@@ -829,41 +810,76 @@ export async function computeTreeFullDiff(
       continue;
     }
 
-    let oldText: string | null = null;
-    let newText: string | null = null;
+    fetchTasks.push(async () => {
+      let oldText: string | null = null;
+      let newText: string | null = null;
+      let isBinary = false;
 
-    if (sum.oldOid) {
-      try {
-        const oldBlob = await client.getBlob(sum.oldOid);
-        oldText = oldBlob.text ?? null;
-      } catch {
-        oldText = null;
+      if (sum.oldOid) {
+        try {
+          const oldBlob = await client.getBlob(sum.oldOid);
+          if (oldBlob.isBinary) {
+            isBinary = true;
+          } else {
+            oldText = oldBlob.text ?? null;
+          }
+        } catch {
+          oldText = null;
+        }
       }
-    }
 
-    if (sum.newOid) {
-      try {
-        const newBlob = await client.getBlob(sum.newOid);
-        newText = newBlob.text ?? null;
-      } catch {
-        newText = null;
+      if (sum.newOid && !isBinary) {
+        try {
+          const newBlob = await client.getBlob(sum.newOid);
+          if (newBlob.isBinary) {
+            isBinary = true;
+          } else {
+            newText = newBlob.text ?? null;
+          }
+        } catch {
+          newText = null;
+        }
       }
-    }
 
-    batchItems.push({
-      oldPath: sum.oldPath,
-      newPath: sum.newPath,
-      oldOid: sum.oldOid,
-      newOid: sum.newOid,
-      oldMode: sum.oldMode,
-      newMode: sum.newMode,
-      status: sum.status,
-      ...(sum.modeChanged !== undefined ? { modeChanged: sum.modeChanged } : {}),
-      isBinary: false,
-      oldContent: oldText,
-      newContent: newText,
-      ...(options?.contextLines !== undefined ? { contextLines: options.contextLines } : {}),
+      if (isBinary) {
+        fileDiffs.push({
+          status: sum.status,
+          oldPath: sum.oldPath,
+          newPath: sum.newPath,
+          oldOid: sum.oldOid,
+          newOid: sum.newOid,
+          oldMode: sum.oldMode,
+          newMode: sum.newMode,
+          ...(sum.modeChanged !== undefined ? { modeChanged: sum.modeChanged } : {}),
+          isBinary: true,
+          additions: 0,
+          deletions: 0,
+          hunks: [],
+          splitRows: [],
+        });
+      } else {
+        batchItems.push({
+          oldPath: sum.oldPath,
+          newPath: sum.newPath,
+          oldOid: sum.oldOid,
+          newOid: sum.newOid,
+          oldMode: sum.oldMode,
+          newMode: sum.newMode,
+          status: sum.status,
+          ...(sum.modeChanged !== undefined ? { modeChanged: sum.modeChanged } : {}),
+          isBinary: false,
+          oldContent: oldText,
+          newContent: newText,
+          ...(options?.contextLines !== undefined ? { contextLines: options.contextLines } : {}),
+        });
+      }
     });
+  }
+
+  // Execute in batches to prevent saturating browser connection limits
+  for (let i = 0; i < fetchTasks.length; i += MAX_CONCURRENT_BLOB_FETCHES) {
+    const chunk = fetchTasks.slice(i, i + MAX_CONCURRENT_BLOB_FETCHES);
+    await Promise.all(chunk.map((task) => task()));
   }
 
   if (batchItems.length > 0) {

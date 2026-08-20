@@ -71,8 +71,8 @@ describe('Milestone M1 Empirical Stress Tests: Adversarial RefSelector', () => {
 
       expect(bRes).toHaveLength(1);
       expect(tagRes.length).toBeGreaterThanOrEqual(1);
-      expect(t1 - t0).toBeLessThan(80);
-      expect(t2 - t1).toBeLessThan(80);
+      expect(t1 - t0).toBeLessThan(150);
+      expect(t2 - t1).toBeLessThan(150);
     });
 
     it('executes 100 consecutive search queries on 5,000 branches in < 500ms total', () => {

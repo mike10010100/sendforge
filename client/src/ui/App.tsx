@@ -9,7 +9,7 @@ import type {
   RepoMeta,
   RepoStats,
 } from '../engine/types.js';
-import { diffClient } from '../worker/diff-client.js';
+import { computeTreeFullDiff } from '../worker/diff-algo.js';
 import type { FileDiff } from '../worker/diff-types.js';
 import { BlobView } from './BlobView.js';
 import { CommitLog } from './CommitLog.js';
@@ -144,73 +144,8 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
         const commit = await client.getCommit(commitOid);
         setCurrentCommit(commit);
 
-        const currentTreeObj = await client.getTree(commit.tree);
-        const currentFiles = await client.listAllTreeFiles(currentTreeObj.oid);
-
-        let parentFiles: readonly TreeFileItem[] = [];
-        if (commit.parents[0]) {
-          try {
-            const parentCommit = await client.getCommit(commit.parents[0]);
-            const parentTreeObj = await client.getTree(parentCommit.tree);
-            parentFiles = await client.listAllTreeFiles(parentTreeObj.oid);
-          } catch {
-            parentFiles = [];
-          }
-        }
-
-        const parentMap = new Map(parentFiles.map((f) => [f.path, f.entry]));
-        const currentMap = new Map(currentFiles.map((f) => [f.path, f.entry]));
-        const allPaths = Array.from(new Set([...parentMap.keys(), ...currentMap.keys()])).sort();
-
-        const diffs: FileDiff[] = [];
-        for (const filePath of allPaths) {
-          const oldEntry = parentMap.get(filePath);
-          const newEntry = currentMap.get(filePath);
-
-          if (oldEntry?.oid === newEntry?.oid && oldEntry !== undefined) {
-            continue; // Unmodified
-          }
-
-          let oldText: string | null = null;
-          let newText: string | null = null;
-          let isBinary = false;
-
-          if (oldEntry) {
-            try {
-              const b = await client.getBlob(oldEntry.oid);
-              if (b.isBinary) {
-                isBinary = true;
-              } else {
-                oldText = b.text ?? '';
-              }
-            } catch {
-              oldText = null;
-            }
-          }
-
-          if (newEntry) {
-            try {
-              const b = await client.getBlob(newEntry.oid);
-              if (b.isBinary) {
-                isBinary = true;
-              } else {
-                newText = b.text ?? '';
-              }
-            } catch {
-              newText = null;
-            }
-          }
-
-          const diff = await diffClient.computeDiff(
-            oldEntry ? filePath : null,
-            newEntry ? filePath : null,
-            oldText,
-            newText,
-            { isBinary }
-          );
-          diffs.push(diff);
-        }
-
+        const parentSha = commit.parents[0] ?? null;
+        const diffs = await computeTreeFullDiff(client, parentSha, commitOid);
         setFileDiffs(diffs);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
