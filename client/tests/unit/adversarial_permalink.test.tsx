@@ -408,7 +408,7 @@ describe('Adversarial Stress Testing: Permalinks & Line Highlighting (Milestone 
       const html = render(
         h(BlobView, {
           blob: binaryBlob,
-          path: 'logo.png',
+          path: 'data.bin',
           commitOid: sampleCommitOid,
           selectedRange: { start: 10, end: 20 },
         })

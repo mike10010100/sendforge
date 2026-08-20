@@ -116,8 +116,20 @@ describe('UI Components & Renderers', () => {
       isBinary: true,
     };
 
-    const binaryHtml = render(<BlobView blob={binaryBlob} path="image.png" />);
+    const binaryHtml = render(<BlobView blob={binaryBlob} path="archive.bin" />);
     expect(binaryHtml).toContain('Binary file');
+
+    const imageBlob: GitBlobObject = {
+      type: 'blob',
+      oid: '3333333333333333333333333333333333333333',
+      size: 2048,
+      data: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+      isBinary: true,
+    };
+
+    const imageHtml = render(<BlobView blob={imageBlob} path="assets/logo.png" />);
+    expect(imageHtml).toContain('image/png');
+    expect(imageHtml).toContain('assets/logo.png');
 
     const withPropsHtml = render(
       <BlobView

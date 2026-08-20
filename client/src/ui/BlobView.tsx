@@ -8,11 +8,25 @@ import {
   formatBytes,
   formatLineHash,
   formatSha,
+  getImageMimeType,
+  isImageFileName,
   parseLineHash,
   renderMarkdown,
   type LineRange,
 } from './utils.js';
 import { useEventListener, useStableCallback } from './hooks/useLifecycle.js';
+
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(bytes).toString('base64');
+  }
+  let binary = '';
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i] ?? 0);
+  }
+  return typeof btoa !== 'undefined' ? btoa(binary) : '';
+}
 
 export interface BlobViewProps {
   readonly blob: GitBlobObject;
@@ -37,10 +51,13 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
   onSelectRange,
   initialRange,
 }) => {
+  const isImage = isImageFileName(path);
+  const isMd = path.toLowerCase().endsWith('.md');
+
   const [copiedContent, setCopiedContent] = useState(false);
   const [copiedPermalink, setCopiedPermalink] = useState(false);
   const [viewMode, setViewMode] = useState<'code' | 'blame' | 'raw' | 'rendered'>(
-    path.toLowerCase().endsWith('.md') ? 'rendered' : 'code'
+    isMd ? 'rendered' : isImage ? 'rendered' : 'code'
   );
   const [selectedRange, setSelectedRange] = useState<LineRange | null>(
     initialRange ?? propSelectedRange ?? null
@@ -48,7 +65,24 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
   const [anchorLine, setAnchorLine] = useState<number | null>(
     initialRange ? initialRange.start : propSelectedRange ? propSelectedRange.start : null
   );
+  const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [BlameComponent, setBlameComponent] = useState<FunctionalComponent<BlameViewProps> | null>(null);
+
+  // Manage Object URL for image blobs with clean auto-revocation
+  useEffect(() => {
+    if (isImage && typeof URL !== 'undefined' && typeof Blob !== 'undefined') {
+      const mimeType = getImageMimeType(path);
+      const blobObj = new Blob([blob.data as BlobPart], { type: mimeType });
+      const url = URL.createObjectURL(blobObj);
+      setImageUrl(url);
+      return () => {
+        URL.revokeObjectURL(url);
+      };
+    }
+    setImageUrl(null);
+    return undefined;
+  }, [blob.data, isImage, path]);
 
   useEffect(() => {
     if (viewMode === 'blame' && !BlameComponent) {
@@ -59,6 +93,7 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
   }, [viewMode, BlameComponent]);
 
   const lines = blob.text ? blob.text.split(/\r?\n/) : [];
+  const imageSrc = imageUrl ?? (isImage ? `data:${getImageMimeType(path)};base64,${uint8ArrayToBase64(blob.data)}` : undefined);
 
   const updateUrlLineHash = (range: LineRange | null) => {
     if (typeof window === 'undefined') return;
@@ -81,7 +116,7 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
       setAnchorLine(parsed.start);
       onSelectRange?.(parsed);
       requestAnimationFrame(() => {
-        document.getElementById(`L${parsed.start}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        document.getElementById(`L${String(parsed.start)}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       });
     }
   });
@@ -137,8 +172,6 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
     updateUrlLineHash(range);
   };
 
-  const isMd = path.toLowerCase().endsWith('.md');
-
   return (
     <div className="blob-view-wrapper">
       <div className="box">
@@ -151,7 +184,12 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
             )}
             <span>{path}</span>
             <span className="badge">{formatBytes(blob.size)}</span>
-            {!blob.isBinary && <span className="badge">{lines.length} lines</span>}
+            {imageDimensions && (
+              <span className="badge" style={{ color: 'var(--accent-color)' }}>
+                {imageDimensions.width} × {imageDimensions.height} px
+              </span>
+            )}
+            {!blob.isBinary && !isImage && <span className="badge">{lines.length} lines</span>}
             <span className="badge" style={{ fontFamily: 'var(--font-mono)' }}>
               {formatSha(blob.oid)}
             </span>
@@ -170,7 +208,19 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
               </button>
             )}
 
-            {!blob.isBinary && (
+            {isImage && blob.text && (
+              <button
+                type="button"
+                className={`btn ${viewMode === 'rendered' ? 'btn-primary' : ''}`}
+                onClick={() => {
+                  setViewMode(viewMode === 'rendered' ? 'code' : 'rendered');
+                }}
+              >
+                {viewMode === 'rendered' ? 'View Source' : 'Preview Image'}
+              </button>
+            )}
+
+            {!blob.isBinary && !isImage && (
               <div className="btn-group">
                 <button
                   type="button"
@@ -195,7 +245,7 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
               </div>
             )}
 
-            {!blob.isBinary && (
+            {!blob.isBinary && !isImage && (
               <button
                 type="button"
                 className={`btn ${viewMode === 'raw' ? 'btn-primary' : ''}`}
@@ -213,18 +263,19 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
               type="button"
               className="btn raw-download-btn"
               onClick={() => {
-                const filename = path.split('/').pop() ?? 'blob.bin';
+                const filename = path.split('/').pop() ?? (isImage ? 'image.png' : 'blob.bin');
+                const mime = isImage ? getImageMimeType(path) : 'application/octet-stream';
                 void import('../engine/archive.js').then((m) => {
-                  m.triggerDownload(filename, blob.data, 'application/octet-stream');
+                  m.triggerDownload(filename, blob.data, mime);
                 });
               }}
-              title="Download raw file content"
+              title="Download file content"
               data-testid="raw-download-btn"
             >
               📥 Download
             </button>
 
-            {!blob.isBinary && (
+            {!blob.isBinary && !isImage && (
               <button
                 type="button"
                 className={`btn copy-permalink-btn ${copiedPermalink ? 'btn-copied' : ''}`}
@@ -238,7 +289,7 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
               </button>
             )}
 
-            {!blob.isBinary && (
+            {!blob.isBinary && !isImage && (
               <button
                 type="button"
                 className="btn"
@@ -253,7 +304,29 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
           </div>
         </div>
 
-        {blob.isBinary ? (
+        {/* View Mode Rendering */}
+        {isImage && viewMode === 'rendered' && imageSrc ? (
+          <div className="image-viewer-container" data-testid="image-viewer">
+            <div className="image-preview-frame">
+              <img
+                src={imageSrc}
+                alt={path}
+                className="image-preview-img"
+                onLoad={(e) => {
+                  const img = e.currentTarget;
+                  setImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+                }}
+              />
+            </div>
+            <div className="image-metadata-bar">
+              <span>🖼️ {getImageMimeType(path)}</span>
+              {imageDimensions && (
+                <span>📐 {imageDimensions.width} × {imageDimensions.height} px</span>
+              )}
+              <span>💾 {formatBytes(blob.size)}</span>
+            </div>
+          </div>
+        ) : blob.isBinary && !isImage ? (
           <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>
             <p style={{ fontSize: '16px', marginBottom: '8px' }}>Binary file ({formatBytes(blob.size)})</p>
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
@@ -325,7 +398,7 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
                 return (
                   <span
                     key={lineNum}
-                    id={`L${lineNum}`}
+                    id={`L${String(lineNum)}`}
                     data-line-number={lineNum}
                     className={`line-number ${isSel ? 'highlighted line-selected' : ''}`}
                     onClick={(e) => {
@@ -347,7 +420,7 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
                 return (
                   <div
                     key={lineNum}
-                    id={`LC${lineNum}`}
+                    id={`LC${String(lineNum)}`}
                     data-line-number={lineNum}
                     className={`code-line ${isSel ? 'highlighted line-highlight line-selected' : ''}`}
                   >
@@ -362,5 +435,3 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
     </div>
   );
 };
-
-

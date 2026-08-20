@@ -500,7 +500,7 @@ describe('Milestone M4: Archive Engine & Serialization', () => {
       const html = render(
         h(BlobView, {
           blob: mockBinBlob,
-          path: 'assets/logo.png',
+          path: 'assets/archive.bin',
         })
       );
 

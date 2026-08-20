@@ -461,4 +461,34 @@ export function buildPermalinkUrl(
   return `#/commit/${commitOid}/blob/${cleanPath}${hash}`;
 }
 
+const IMAGE_EXTENSIONS: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  svg: 'image/svg+xml',
+  ico: 'image/x-icon',
+  bmp: 'image/bmp',
+  avif: 'image/avif',
+  tif: 'image/tiff',
+  tiff: 'image/tiff',
+};
+
+export function isImageFileName(filePath: string): boolean {
+  if (!filePath) return false;
+  const dotIdx = filePath.lastIndexOf('.');
+  if (dotIdx === -1) return false;
+  const ext = filePath.slice(dotIdx + 1).toLowerCase();
+  return ext in IMAGE_EXTENSIONS;
+}
+
+export function getImageMimeType(filePath: string): string {
+  if (!filePath) return 'application/octet-stream';
+  const dotIdx = filePath.lastIndexOf('.');
+  if (dotIdx === -1) return 'application/octet-stream';
+  const ext = filePath.slice(dotIdx + 1).toLowerCase();
+  return IMAGE_EXTENSIONS[ext] ?? 'application/octet-stream';
+}
+
 

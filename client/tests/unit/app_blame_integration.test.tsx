@@ -277,7 +277,7 @@ describe('Adversarial & Edge Case Integration Tests', () => {
     const html = render(
       h(BlobView, {
         blob: binBlob,
-        path: 'logo.png',
+        path: 'data.bin',
       })
     );
 
