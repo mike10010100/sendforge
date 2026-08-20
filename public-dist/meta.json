@@ -7,42 +7,42 @@
   "branches": [
     {
       "name": "main",
-      "target": "d94faf9607cececa3593ac1ea998bfeef7179f3d",
+      "target": "dd55c4eaaa014575f29de53e35991bb1c340fd9c",
       "is_default": true,
-      "latest_commit_date": "2026-08-20T14:06:39Z"
+      "latest_commit_date": "2026-08-20T14:10:44Z"
     }
   ],
   "tags": [],
   "head": {
     "ref": "refs/heads/main",
-    "sha": "d94faf9607cececa3593ac1ea998bfeef7179f3d"
+    "sha": "dd55c4eaaa014575f29de53e35991bb1c340fd9c"
   },
   "latest_commit": {
-    "id": "d94faf9607cececa3593ac1ea998bfeef7179f3d",
-    "short_id": "d94faf9",
-    "tree": "4e3405bb529524d3ec5600e0091555d41ddd3722",
+    "id": "dd55c4eaaa014575f29de53e35991bb1c340fd9c",
+    "short_id": "dd55c4e",
+    "tree": "3a37d82a515db40316baf12edf20124dc3739dbe",
     "parents": [
-      "613a423e2f8b214645641ed9a444f2d29c54efb3"
+      "d94faf9607cececa3593ac1ea998bfeef7179f3d"
     ],
     "author": {
       "name": "Michael Paulauski",
       "email": "mike10010100@gmail.com",
-      "timestamp": 1787234799,
-      "date": "2026-08-20T14:06:39Z"
+      "timestamp": 1787235044,
+      "date": "2026-08-20T14:10:44Z"
     },
     "committer": {
       "name": "Michael Paulauski",
       "email": "mike10010100@gmail.com",
-      "timestamp": 1787234799,
-      "date": "2026-08-20T14:06:39Z"
+      "timestamp": 1787235044,
+      "date": "2026-08-20T14:10:44Z"
     },
-    "message": "feat(seo): deploy 1200x630 Open Graph preview card for Bluesky link embeds",
-    "summary": "feat(seo): deploy 1200x630 Open Graph preview card for Bluesky link embeds"
+    "message": "feat(seo): genericize Open Graph metadata for any Sendforge-hosted repository",
+    "summary": "feat(seo): genericize Open Graph metadata for any Sendforge-hosted repository"
   },
   "stats": {
     "branch_count": 1,
     "tag_count": 0,
-    "commit_count": 19,
+    "commit_count": 20,
     "file_count": 19,
     "pull_count": 0,
     "open_pull_count": 0,
@@ -51,5 +51,5 @@
   },
   "has_readme": true,
   "readme_filename": "README.md",
-  "updated_at": "2026-08-20T14:10:20Z"
+  "updated_at": "2026-08-20T14:16:47Z"
 }

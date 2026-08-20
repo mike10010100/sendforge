@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'preact/hooks';
+import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import type { FunctionalComponent } from 'preact';
 import { GitRepositoryClient, type TreeFileItem } from '../engine/fetcher.js';
 import { CollabClient, type Issue, type PullRequest } from '../engine/collab-client.js';
@@ -60,54 +60,7 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load initial repository metadata & collaboration catalogs
-  useEffect(() => {
-    let isMounted = true;
-    const initMeta = async () => {
-      try {
-        setLoading(true);
-        const [repoMeta, loadedPulls, loadedIssues] = await Promise.all([
-          client.getMeta(),
-          collabClient.getPullRequests().catch(() => []),
-          collabClient.getIssues().catch(() => []),
-        ]);
-
-        if (!isMounted) return;
-        setMeta(repoMeta);
-        setPulls(loadedPulls);
-        setIssues(loadedIssues);
-        setCurrentRef(repoMeta.default_branch || 'main');
-
-        if (repoMeta.name) {
-          const title = repoMeta.description
-            ? `${repoMeta.name} — ${repoMeta.description}`
-            : `${repoMeta.name} — Sendforge`;
-          document.title = title;
-          const ogTitleEl = document.querySelector('meta[property="og:title"]');
-          if (ogTitleEl) ogTitleEl.setAttribute('content', title);
-          const twTitleEl = document.querySelector('meta[name="twitter:title"]');
-          if (twTitleEl) twTitleEl.setAttribute('content', title);
-          if (repoMeta.description) {
-            const ogDescEl = document.querySelector('meta[property="og:description"]');
-            if (ogDescEl) ogDescEl.setAttribute('content', repoMeta.description);
-            const twDescEl = document.querySelector('meta[name="twitter:description"]');
-            if (twDescEl) twDescEl.setAttribute('content', repoMeta.description);
-          }
-        }
-      } catch (err) {
-        if (!isMounted) return;
-        const msg = err instanceof Error ? err.message : String(err);
-        setError(`Failed to load repository metadata: ${msg}`);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    };
-
-    void initMeta();
-    return () => {
-      isMounted = false;
-    };
-  }, [client, collabClient]);
+  const routeHandlerRef = useRef<((hash: string) => void) | null>(null);
 
   // Load ref state when currentRef changes
   const loadRefState = useCallback(
@@ -270,6 +223,63 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
     [client]
   );
 
+  // Load initial repository metadata & collaboration catalogs
+  useEffect(() => {
+    let isMounted = true;
+    const initMeta = async () => {
+      try {
+        setLoading(true);
+        const [repoMeta, loadedPulls, loadedIssues] = await Promise.all([
+          client.getMeta(),
+          collabClient.getPullRequests().catch(() => []),
+          collabClient.getIssues().catch(() => []),
+        ]);
+
+        if (!isMounted) return;
+        setMeta(repoMeta);
+        setPulls(loadedPulls);
+        setIssues(loadedIssues);
+        const defaultRef = repoMeta.default_branch || 'main';
+        setCurrentRef(defaultRef);
+
+        if (repoMeta.name) {
+          const title = repoMeta.description
+            ? `${repoMeta.name} — ${repoMeta.description}`
+            : `${repoMeta.name} — Sendforge`;
+          document.title = title;
+          const ogTitleEl = document.querySelector('meta[property="og:title"]');
+          if (ogTitleEl) ogTitleEl.setAttribute('content', title);
+          const twTitleEl = document.querySelector('meta[name="twitter:title"]');
+          if (twTitleEl) twTitleEl.setAttribute('content', title);
+          if (repoMeta.description) {
+            const ogDescEl = document.querySelector('meta[property="og:description"]');
+            if (ogDescEl) ogDescEl.setAttribute('content', repoMeta.description);
+            const twDescEl = document.querySelector('meta[name="twitter:description"]');
+            if (twDescEl) twDescEl.setAttribute('content', repoMeta.description);
+          }
+        }
+
+        const hash = typeof window !== 'undefined' ? window.location.hash : '';
+        if (hash) {
+          routeHandlerRef.current?.(hash);
+        } else {
+          void loadRefState(defaultRef, '');
+        }
+      } catch (err) {
+        if (!isMounted) return;
+        const msg = err instanceof Error ? err.message : String(err);
+        setError(`Failed to load repository metadata: ${msg}`);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    void initMeta();
+    return () => {
+      isMounted = false;
+    };
+  }, [client, collabClient, loadRefState]);
+
   // Hash Route Synchronizer
   const handleRouteChange = useCallback(
     (hash: string) => {
@@ -349,28 +359,23 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
     [currentPath, currentRef, meta, selectedCommitDiff, loadCommitDiff, loadRefState]
   );
 
-  // Listen to window hashchange
+  routeHandlerRef.current = handleRouteChange;
+
+  // Listen to window hashchange once on mount
   useEffect(() => {
     const onHashChange = () => {
-      handleRouteChange(window.location.hash);
+      routeHandlerRef.current?.(window.location.hash);
     };
 
     window.addEventListener('hashchange', onHashChange);
-    // Initial route handling
     if (window.location.hash) {
-      handleRouteChange(window.location.hash);
+      routeHandlerRef.current?.(window.location.hash);
     }
 
     return () => {
       window.removeEventListener('hashchange', onHashChange);
     };
-  }, [handleRouteChange]);
-
-  useEffect(() => {
-    if (meta && currentRef && activeTab === 'code' && !currentCommit) {
-      void loadRefState(currentRef, currentPath);
-    }
-  }, [meta, currentRef, activeTab, currentCommit, loadRefState, currentPath]);
+  }, []);
 
   // Global hotkey handler (Ctrl+K / Cmd+K / T)
   useEffect(() => {
