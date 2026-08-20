@@ -77,6 +77,23 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
         setPulls(loadedPulls);
         setIssues(loadedIssues);
         setCurrentRef(repoMeta.default_branch || 'main');
+
+        if (repoMeta.name) {
+          const title = repoMeta.description
+            ? `${repoMeta.name} — ${repoMeta.description}`
+            : `${repoMeta.name} — Sendforge`;
+          document.title = title;
+          const ogTitleEl = document.querySelector('meta[property="og:title"]');
+          if (ogTitleEl) ogTitleEl.setAttribute('content', title);
+          const twTitleEl = document.querySelector('meta[name="twitter:title"]');
+          if (twTitleEl) twTitleEl.setAttribute('content', title);
+          if (repoMeta.description) {
+            const ogDescEl = document.querySelector('meta[property="og:description"]');
+            if (ogDescEl) ogDescEl.setAttribute('content', repoMeta.description);
+            const twDescEl = document.querySelector('meta[name="twitter:description"]');
+            if (twDescEl) twDescEl.setAttribute('content', repoMeta.description);
+          }
+        }
       } catch (err) {
         if (!isMounted) return;
         const msg = err instanceof Error ? err.message : String(err);

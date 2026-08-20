@@ -42,6 +42,40 @@ pub fn format_timestamp_iso(timestamp: i64) -> String {
     )
 }
 
+/// Derives canonical Open Graph URL for a repository subpath.
+#[must_use]
+pub fn get_og_url(meta: &SendforgeRepoMeta, subpath: &str) -> String {
+    if let Some(ref clone_url) = meta.clone_url {
+        if clone_url.starts_with("http://") || clone_url.starts_with("https://") {
+            let base = clone_url.trim_end_matches(".git").trim_end_matches('/');
+            if subpath.is_empty() {
+                return format!("{base}/");
+            }
+            return format!("{base}/{subpath}");
+        }
+    }
+    if subpath.is_empty() {
+        "./".to_string()
+    } else {
+        format!("./{subpath}")
+    }
+}
+
+/// Derives absolute Open Graph image URL based on repository clone URL or fallback.
+#[must_use]
+pub fn get_og_image(meta: &SendforgeRepoMeta) -> String {
+    if let Some(ref clone_url) = meta.clone_url {
+        if let Some(rest) = clone_url.strip_prefix("https://") {
+            let host = rest.split('/').next().unwrap_or(rest);
+            return format!("https://{host}/og-card.png");
+        } else if let Some(rest) = clone_url.strip_prefix("http://") {
+            let host = rest.split('/').next().unwrap_or(rest);
+            return format!("http://{host}/og-card.png");
+        }
+    }
+    "/og-card.png".to_string()
+}
+
 /// Renders a `CommonMark` Markdown document into sanitized HTML.
 #[must_use]
 pub fn render_markdown(markdown_text: &str) -> String {
@@ -255,6 +289,8 @@ pub fn render_index_html(
     let tree_table_body = build_tree_table_rows(tree_entries);
     let readme_section = build_readme_section(meta, rendered_readme_html);
     let nav_html = render_nav_bar(NavTab::Code, meta, 0);
+    let og_url = get_og_url(meta, "");
+    let og_image = get_og_image(meta);
 
     format!(
         r#"<!DOCTYPE html>
@@ -265,17 +301,17 @@ pub fn render_index_html(
   <title>{repo_name_esc} - Sendforge</title>
   <meta name="description" content="{desc_esc}">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://www.sendforge.dev/">
-  <meta property="og:site_name" content="Sendforge">
+  <meta property="og:url" content="{og_url}">
+  <meta property="og:site_name" content="{repo_name_esc}">
   <meta property="og:title" content="{repo_name_esc} — The Static-First Git Forge">
   <meta property="og:description" content="{desc_esc}">
-  <meta property="og:image" content="https://www.sendforge.dev/og-card.png">
+  <meta property="og:image" content="{og_image}">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="{repo_name_esc} — The Static-First Git Forge">
   <meta name="twitter:description" content="{desc_esc}">
-  <meta name="twitter:image" content="https://www.sendforge.dev/og-card.png">
+  <meta name="twitter:image" content="{og_image}">
   <link rel="stylesheet" href="/style.css">
   <script type="module" src="/app.js"></script>
 </head>
@@ -300,9 +336,9 @@ pub fn render_index_html(
       <table class="tree-table">
         <thead>
           <tr>
-            <th>Type</th>
             <th>Name</th>
-            <th>Object ID</th>
+            <th>Mode</th>
+            <th>SHA</th>
           </tr>
         </thead>
         <tbody>
@@ -312,47 +348,48 @@ pub fn render_index_html(
 
 {readme_section}
 
-    <!-- Footer -->
+    <!-- Static Footer -->
     <footer class="forge-footer">
       <span>Powered by <strong>Sendforge</strong> (Static-First Git Forge)</span>
       <span>Last updated: {updated_at_esc}</span>
     </footer>
   </div>
 </body>
-</html>
-"#
+</html>"#
     )
 }
 
-/// Pre-renders the zero-JS `log.html` commit history page fallback.
+/// Renders a pre-rendered static `log.html` commit log page.
 #[must_use]
 pub fn render_log_html(meta: &SendforgeRepoMeta, commits: &[CommitObject]) -> String {
     let repo_name_esc = escape_html(&meta.name);
     let updated_at_esc = escape_html(&meta.updated_at);
     let nav_html = render_nav_bar(NavTab::Commits, meta, 0);
+    let og_url = get_og_url(meta, "log.html");
+    let og_image = get_og_image(meta);
 
     let commit_items = if commits.is_empty() {
-        r#"        <li class="commit-item empty-commits"><p>No commits recorded yet.</p></li>"#
-            .to_string()
+        "        <li class=\"commit-item empty\">No commits found.</li>\n".to_string()
     } else {
         let mut list_html = String::new();
         for commit in commits {
-            let summary_esc = escape_html(&commit.summary);
-            let author_name_esc = escape_html(&commit.author.name);
-            let author_email_esc = escape_html(&commit.author.email);
-            let author_date_esc = escape_html(&commit.author.date);
+            let msg_esc = escape_html(&commit.summary);
+            let author_esc =
+                escape_html(&format!("{} <{}>", commit.author.name, commit.author.email));
             let short_id_esc = escape_html(&commit.short_id);
+            let date_esc = escape_html(&commit.author.date);
 
-            let _ = writeln!(
+            let _ = write!(
                 list_html,
                 r#"        <li class="commit-item">
-          <div class="commit-message">{summary_esc}</div>
-          <div class="commit-details">
-            <span>{author_name_esc} &lt;{author_email_esc}&gt;</span>
-            <time datetime="{author_date_esc}">{author_date_esc}</time>
-            <span class="commit-sha"><code>{short_id_esc}</code></span>
+          <div class="commit-msg">{msg_esc}</div>
+          <div class="commit-meta">
+            <span class="commit-author">{author_esc}</span>
+            <time class="commit-date">{date_esc}</time>
+            <code class="commit-sha">{short_id_esc}</code>
           </div>
-        </li>"#
+        </li>
+"#
             );
         }
         list_html
@@ -366,13 +403,13 @@ pub fn render_log_html(meta: &SendforgeRepoMeta, commits: &[CommitObject]) -> St
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Commit History - {repo_name_esc} - Sendforge</title>
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://www.sendforge.dev/log.html">
-  <meta property="og:site_name" content="Sendforge">
+  <meta property="og:url" content="{og_url}">
+  <meta property="og:site_name" content="{repo_name_esc}">
   <meta property="og:title" content="Commit History — {repo_name_esc}">
-  <meta property="og:image" content="https://www.sendforge.dev/og-card.png">
+  <meta property="og:image" content="{og_image}">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Commit History — {repo_name_esc}">
-  <meta name="twitter:image" content="https://www.sendforge.dev/og-card.png">
+  <meta name="twitter:image" content="{og_image}">
   <link rel="stylesheet" href="/style.css">
   <script type="module" src="/app.js"></script>
 </head>
@@ -485,6 +522,8 @@ pub fn render_pulls_html(meta: &SendforgeRepoMeta, pulls: &[PullRequest]) -> Str
         .count();
 
     let items_html = build_pr_list_items(pulls);
+    let og_url = get_og_url(meta, "pulls.html");
+    let og_image = get_og_image(meta);
 
     format!(
         r#"<!DOCTYPE html>
@@ -495,15 +534,15 @@ pub fn render_pulls_html(meta: &SendforgeRepoMeta, pulls: &[PullRequest]) -> Str
   <title>Pull Requests - {repo_name_esc} - Sendforge</title>
   <meta name="description" content="{desc_esc}">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://www.sendforge.dev/pulls.html">
-  <meta property="og:site_name" content="Sendforge">
+  <meta property="og:url" content="{og_url}">
+  <meta property="og:site_name" content="{repo_name_esc}">
   <meta property="og:title" content="Pull Requests — {repo_name_esc}">
   <meta property="og:description" content="{desc_esc}">
-  <meta property="og:image" content="https://www.sendforge.dev/og-card.png">
+  <meta property="og:image" content="{og_image}">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Pull Requests — {repo_name_esc}">
   <meta name="twitter:description" content="{desc_esc}">
-  <meta name="twitter:image" content="https://www.sendforge.dev/og-card.png">
+  <meta name="twitter:image" content="{og_image}">
   <link rel="stylesheet" href="/style.css">
   <script type="module" src="/app.js"></script>
 </head>
@@ -717,6 +756,7 @@ pub fn render_pull_detail_html(meta: &SendforgeRepoMeta, pull: &PullRequest) -> 
 
     let comments_html =
         build_comments_html(&pull.comments, "No comments on this pull request yet.");
+    let og_image = get_og_image(meta);
 
     format!(
         r#"<!DOCTYPE html>
@@ -726,12 +766,12 @@ pub fn render_pull_detail_html(meta: &SendforgeRepoMeta, pull: &PullRequest) -> 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>#{number} {title_esc} - Pull Requests - {repo_name_esc} - Sendforge</title>
   <meta property="og:type" content="website">
-  <meta property="og:site_name" content="Sendforge">
+  <meta property="og:site_name" content="{repo_name_esc}">
   <meta property="og:title" content="PR #{number}: {title_esc} — {repo_name_esc}">
-  <meta property="og:image" content="https://www.sendforge.dev/og-card.png">
+  <meta property="og:image" content="{og_image}">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="PR #{number}: {title_esc} — {repo_name_esc}">
-  <meta name="twitter:image" content="https://www.sendforge.dev/og-card.png">
+  <meta name="twitter:image" content="{og_image}">
   <link rel="stylesheet" href="../style.css">
   <script type="module" src="../app.js"></script>
 </head>
@@ -792,6 +832,7 @@ pub fn render_issue_detail_html(meta: &SendforgeRepoMeta, issue: &Issue) -> Stri
     let updated_at_esc = escape_html(&meta.updated_at);
     let created_at_iso = format_timestamp_iso(issue.created_at);
     let nav_html = render_nav_bar(NavTab::Issues, meta, 1);
+    let og_image = get_og_image(meta);
 
     let (status_badge, status_class) = match issue.status {
         IssueStatus::Open => ("🟢 Open", "badge-open"),
@@ -815,12 +856,12 @@ pub fn render_issue_detail_html(meta: &SendforgeRepoMeta, issue: &Issue) -> Stri
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>#{number} {title_esc} - Issues - {repo_name_esc} - Sendforge</title>
   <meta property="og:type" content="website">
-  <meta property="og:site_name" content="Sendforge">
+  <meta property="og:site_name" content="{repo_name_esc}">
   <meta property="og:title" content="Issue #{number}: {title_esc} — {repo_name_esc}">
-  <meta property="og:image" content="https://www.sendforge.dev/og-card.png">
+  <meta property="og:image" content="{og_image}">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Issue #{number}: {title_esc} — {repo_name_esc}">
-  <meta name="twitter:image" content="https://www.sendforge.dev/og-card.png">
+  <meta name="twitter:image" content="{og_image}">
   <link rel="stylesheet" href="../style.css">
   <script type="module" src="../app.js"></script>
 </head>

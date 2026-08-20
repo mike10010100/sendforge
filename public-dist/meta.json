@@ -7,42 +7,42 @@
   "branches": [
     {
       "name": "main",
-      "target": "613a423e2f8b214645641ed9a444f2d29c54efb3",
+      "target": "d94faf9607cececa3593ac1ea998bfeef7179f3d",
       "is_default": true,
-      "latest_commit_date": "2026-08-20T14:05:42Z"
+      "latest_commit_date": "2026-08-20T14:06:39Z"
     }
   ],
   "tags": [],
   "head": {
     "ref": "refs/heads/main",
-    "sha": "613a423e2f8b214645641ed9a444f2d29c54efb3"
+    "sha": "d94faf9607cececa3593ac1ea998bfeef7179f3d"
   },
   "latest_commit": {
-    "id": "613a423e2f8b214645641ed9a444f2d29c54efb3",
-    "short_id": "613a423",
-    "tree": "46e0317c3d6f80adc9d05ee3f9527d0f00150d65",
+    "id": "d94faf9607cececa3593ac1ea998bfeef7179f3d",
+    "short_id": "d94faf9",
+    "tree": "4e3405bb529524d3ec5600e0091555d41ddd3722",
     "parents": [
-      "76b27f6794e0ed23cb8f358c45aef4f24a0324eb"
+      "613a423e2f8b214645641ed9a444f2d29c54efb3"
     ],
     "author": {
       "name": "Michael Paulauski",
       "email": "mike10010100@gmail.com",
-      "timestamp": 1787234742,
-      "date": "2026-08-20T14:05:42Z"
+      "timestamp": 1787234799,
+      "date": "2026-08-20T14:06:39Z"
     },
     "committer": {
       "name": "Michael Paulauski",
       "email": "mike10010100@gmail.com",
-      "timestamp": 1787234742,
-      "date": "2026-08-20T14:05:42Z"
+      "timestamp": 1787234799,
+      "date": "2026-08-20T14:06:39Z"
     },
-    "message": "feat(seo): add high-resolution Open Graph social preview card and metadata for Bluesky and Twitter",
-    "summary": "feat(seo): add high-resolution Open Graph social preview card and metadata for Bluesky and Twitter"
+    "message": "feat(seo): deploy 1200x630 Open Graph preview card for Bluesky link embeds",
+    "summary": "feat(seo): deploy 1200x630 Open Graph preview card for Bluesky link embeds"
   },
   "stats": {
     "branch_count": 1,
     "tag_count": 0,
-    "commit_count": 18,
+    "commit_count": 19,
     "file_count": 19,
     "pull_count": 0,
     "open_pull_count": 0,
@@ -51,5 +51,5 @@
   },
   "has_readme": true,
   "readme_filename": "README.md",
-  "updated_at": "2026-08-20T14:06:14Z"
+  "updated_at": "2026-08-20T14:10:20Z"
 }
