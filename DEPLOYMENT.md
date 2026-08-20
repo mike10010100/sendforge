@@ -14,29 +14,44 @@ This guide details the deployment architectures for **Sendforge**, ranging from 
 
 ---
 
-## 🌟 Option 1: Pure Serverless / Static Hosting (S3 / Cloudflare R2 / Pages)
+## 🌟 Option 1: 100% Free Global Edge Hosting on Cloudflare Pages
 
-Because Sendforge separates repository storage from application compute, you can export your entire forge into pure static files and host them on any CDN or static site provider.
+Because Sendforge separates repository storage from application compute, you can host your entire forge globally across 300+ edge data centers on **Cloudflare Pages' free tier** with **unlimited bandwidth** and **zero server maintenance**.
 
-### 1. Export Repository
+### A. Manual 1-Command Deployment (Wrangler)
 
-```bash
-# Export the bare repository, pre-rendered fallbacks, and SPA bundle
-sendforge export /path/to/my-repo.git ./dist-site --frontend-dist ./dist
-```
+1. **Export the static bundle:**
+   ```bash
+   ./target/release/sendforge export /path/to/my-repo.git ./dist-site --frontend-dist ./dist
+   ```
+   *Note: Sendforge automatically writes a `_headers` file with optimal CORS (`*`) and immutable cache headers for `/objects/*`.*
 
-### 2. Deploy to Cloudflare Pages / AWS S3 / Netlify
+2. **Deploy to Cloudflare Pages:**
+   ```bash
+   npx wrangler pages deploy ./dist-site --project-name my-sendforge
+   ```
 
-* **Cloudflare Pages:**
-  ```bash
-  npx wrangler pages deploy ./dist-site --project-name my-sendforge
-  ```
+### B. Automated Deployment via GitHub Actions (Included)
+
+Sendforge includes a ready-to-use GitHub Actions workflow in [`.github/workflows/deploy-cloudflare.yml`](.github/workflows/deploy-cloudflare.yml).
+
+Whenever you push to `main`, the workflow:
+1. Builds the Rust binary and frontend SPA.
+2. Runs `sendforge export` to package the bare repository.
+3. Automatically deploys to your Cloudflare Pages project.
+
+**Setup Secrets in GitHub Repository Settings → Secrets and Variables → Actions:**
+* `CLOUDFLARE_API_TOKEN`: A Cloudflare API token with Pages edit permissions.
+* `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare Account ID.
+
+### C. Other Static Hosts (AWS S3 / Netlify / GitHub Pages)
+
 * **AWS S3 + CloudFront:**
   ```bash
   aws s3 sync ./dist-site s3://my-sendforge-bucket/ --delete
   ```
-* **GitHub Pages / Any Webroot:**
-  Simply copy the contents of `./dist-site` to your web server's document root.
+* **GitHub Pages / Standard Webroot:**
+  Simply copy the contents of `./dist-site` to your web server's root directory.
 
 ---
 

@@ -80,6 +80,7 @@ export interface RepoBranch {
   readonly name: string;
   readonly target: GitOid;
   readonly is_default: boolean;
+  readonly latest_commit_date?: string | undefined;
 }
 
 export interface RepoTag {
@@ -87,6 +88,14 @@ export interface RepoTag {
   readonly target: GitOid;
   readonly is_annotated: boolean;
   readonly peeled: GitOid | null;
+  readonly peeled_target?: string | null | undefined;
+  readonly tagger?: {
+    readonly name: string;
+    readonly email: string;
+    readonly timestamp: number;
+    readonly date?: string | undefined;
+  } | null | undefined;
+  readonly message?: string | null | undefined;
 }
 
 export interface RepoHead {

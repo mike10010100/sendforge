@@ -1,171 +1,167 @@
-# Project: Sendforge
+# Project: Sendforge Phase 2
 
 ## Architecture
-Sendforge is a high-performance, static-first Git forge decoupling repository storage from application compute:
-1. **Server Layer (Rust CLI / Hook / Static Server)**:
-   - Initializes bare repositories with dumb HTTP server-info (`info/refs`, `objects/info/packs`).
-   - Git `post-receive` hook updates dumb HTTP info, generates `meta.json` repository index, and pre-renders static HTML fallbacks (`index.html`, `log.html`) with zero-JS CommonMark README rendering.
-   - Local Static HTTP Server (`sendforge serve`) supports RFC 7233 Range requests, CORS headers, case-insensitive headers, multi-candidate path resolution, and dumb HTTP transport.
-   - Static Exporter (`sendforge export`) bundles the bare repo, static fallbacks, and compiled TypeScript frontend into a deployable static directory (ready for S3, Cloudflare Pages, Caddy, Nginx).
-   - Strict Rust safety: `#![forbid(unsafe_code)]`, `#![deny(clippy::all, clippy::pedantic, clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::todo, clippy::unimplemented)]`, typed errors with `thiserror`/`anyhow`, clock-warp safe math.
-2. **Client Layer (In-Browser TypeScript Git Engine & UI)**:
-   - In-browser Git engine fetches raw loose Git objects (`/objects/xx/xxx`) over HTTP and inflates zlib envelopes via `DecompressionStream` / `pako`.
-   - Pure TypeScript binary parsers for `commit`, `tree`, `blob`, and `tag` objects with strict discriminated unions and zero-any policy.
-   - Off-thread Web Worker diff calculation (Myers/LCS algorithm for unified and side-by-side split diffs).
-   - Reactive UI (Preact / TypeScript) providing instant branch/tag switching, interactive tree traversal, syntax-highlighted blob viewing, commit timeline, and fuzzy file search (`Ctrl+K`).
-   - Strict TypeScript compiler (`strict: true`, `noImplicitAny: true`, `strictNullChecks: true`, `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`), `@typescript-eslint/strict-type-checked`, and comprehensive Vitest test suite.
-3. **E2E Testing & Verification**:
-   - Automated 4-tier opaque-box test suite (Tiers 1-4) verifying feature isolation, corner cases, cross-feature workflows, and real-world workloads, passing 100% (118/118 tests).
+Sendforge Phase 2 enhances the high-performance, client-side static Git forge with advanced navigation, line provenance, immutable permalinks, and zero-server snapshot archive generation.
 
----
+- **Client Runtime**: Preact 10.26 + TypeScript 5.7 SPA running in modern browsers, bundled with Vite 6.1 (< 35 KB gzipped budget).
+- **Git Engine**: Client-side loose object decoder (`/objects/xx/xxx`), in-memory LRU cache, Myers diff engine, and backward commit DAG walker for `git blame`.
+- **Archive Engine**: Pure TypeScript zero-dependency binary serializer producing PKWARE ZIP (deflate + CRC32) and POSIX ustar `.tar.gz` (gzip) snapshot archives in-browser.
+- **Backend & SSG**: Rust 2021 crate with `#![forbid(unsafe_code)]`, serving static assets, `meta.json`, and loose Git objects with CORS and RFC 7233 byte-range support.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Browser Client (Preact SPA)                                    │
+│ ┌────────────────┐ ┌────────────────┐ ┌──────────────────────┐  │
+│ │ RefSelector.tsx│ │  BlameView.tsx │ │   BlobView.tsx       │  │
+│ │ (Tabs/Search)  │ │ (Heatmap/Avatar│ │ (Permalinks/Raw/Zip) │  │
+│ └───────┬────────┘ └───────┬────────┘ └──────────┬───────────┘  │
+│         │                  │                     │              │
+│ ┌───────▼──────────────────▼─────────────────────▼───────────┐  │
+│ │ GitRepositoryClient / BlameEngine / ArchiveEngine (TS)     │  │
+│ └──────────────────────────┬─────────────────────────────────┘  │
+└────────────────────────────┼────────────────────────────────────┘
+                             │ Fetch (/objects/xx/xxx, /meta.json)
+┌────────────────────────────▼────────────────────────────────────┐
+│ Sendforge Static Site / Server (Rust)                           │
+│ - meta.json (branches, tags, commits, repos)                    │
+│ - /objects/xx/xxx (loose zlib git objects)                      │
+│ - SPA bundle & static assets                                    │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ## Feature Inventory
-| # | Feature | Description | Milestone | Source |
-|---|---------|-------------|-----------|--------|
-| 1 | Bare Repo Initialization | `sendforge init <repo-path>` sets up bare repo with dumb HTTP config & post-receive hook | M1 | ORIGINAL_REQUEST §R1, PRD §5.1 |
-| 2 | Post-Receive Hook Handler | `sendforge hook` processes stdin ref updates (`<oldrev> <newrev> <refname>`) | M1 | ORIGINAL_REQUEST §R1, PRD §5.1 |
-| 3 | Dumb HTTP Server-Info Update | Updates `info/refs` and `objects/info/packs` with peeled tag annotations | M1 | ORIGINAL_REQUEST §R1, PRD §5.1 |
-| 4 | Repository Metadata Generator | Emits `meta.json` with branch heads, tag pointers, commit count, description, timestamps | M1 | ORIGINAL_REQUEST §R1, PRD §5.1 |
-| 5 | Static HTML Fallback Generator | Pre-renders `index.html` (tree & rendered README) and `log.html` (commit log) with zero JS | M1 | ORIGINAL_REQUEST §R1, PRD §6.1 |
-| 6 | CommonMark README Renderer | Safe markdown-to-HTML rendering via `pulldown-cmark` embedded in static fallback | M1 | ORIGINAL_REQUEST §R1, PRD §6.1 |
-| 7 | Rust Safety & Quality Posture | `#![forbid(unsafe_code)]`, strict Clippy deny list, typed `thiserror` errors, clock-warp safety | M1 | ORIGINAL_REQUEST §R1 |
-| 8 | Zlib Loose Object Decompression | In-browser inflation of `/objects/xx/xxx` envelopes via `DecompressionStream` / `pako` | M2 | ORIGINAL_REQUEST §R2, PRD §5.2 |
-| 9 | Binary Tree Object Parser | Binary scanning of `[mode] [path]\0[20-byte SHA-1]` tree entries and recursive resolution | M2 | ORIGINAL_REQUEST §R2, PRD §5.2 |
-| 10 | Text Commit & Tag Parser | Parsing commit headers (`tree`, `parent*`, `author`, `committer`, `gpgsig`) and tag objects | M2 | ORIGINAL_REQUEST §R2, PRD §5.2 |
-| 11 | Blob Reader & Syntax Viewer | UTF-8 text vs binary detection, line numbering, and syntax highlighting | M2 | ORIGINAL_REQUEST §R2, PRD §6.1 |
-| 12 | In-Browser Ref Resolver & Cache | LRU memory cache, request deduplication, and branch/tag resolution via `meta.json` | M2 | ORIGINAL_REQUEST §R2, PRD §5.2 |
-| 13 | Web Worker Off-Thread Diffing | Off-thread diff computation (Myers/LCS) generating unified and side-by-side split diffs | M2 | ORIGINAL_REQUEST §R2, PRD §5.2 |
-| 14 | In-Browser Reactive UI & Router | Preact UI for branch/tag switching, tree navigation, commit log timeline, fuzzy search | M2 | ORIGINAL_REQUEST §R2, PRD §6.1 |
-| 15 | Strict TypeScript & Linting Gates | Strict `tsconfig.json`, zero-`any` discriminated unions, `@typescript-eslint/strict-type-checked` | M2 | ORIGINAL_REQUEST §R2 |
-| 16 | Vitest Unit Test Suite | Comprehensive Vitest suite with fixtures for corrupted objects, empty trees, merge commits | M2 | ORIGINAL_REQUEST §R2 |
-| 17 | Local Static HTTP Server | `sendforge serve` with CORS headers, MIME types, dumb HTTP endpoints, RFC 7233 Range support | M3 | ORIGINAL_REQUEST §R3, PRD §5.1 |
-| 18 | Standalone Static Exporter | `sendforge export` generating self-contained static directory for S3/Cloudflare/Caddy deployment | M3 | ORIGINAL_REQUEST §R3, PRD §6.1 |
-| 19 | E2E Test Harness & Suite (Tiers 1-4) | Automated multi-tier test runner verifying feature isolation, boundaries, combinations, workloads | E2E | ORIGINAL_REQUEST §Acceptance |
-| 20 | Full E2E Pass & Adversarial Hardening | 100% pass of Tiers 1-4 E2E test suite + Tier 5 white-box adversarial stress testing | M4 | ORIGINAL_REQUEST §Acceptance |
-
----
+| # | Feature | Description | Milestone | Source | Status |
+|---|---------|-------------|-----------|--------|--------|
+| 1 | R1.1 Ref Selector Tabs | Dedicated Branches and Tags tabs in ref switcher popover | M1 | ORIGINAL_REQUEST §R1 | DONE |
+| 2 | R1.2 Fuzzy Ref Search | Instant client-side fuzzy search/filter box for branches and tags | M1 | ORIGINAL_REQUEST §R1 | DONE |
+| 3 | R1.3 Ref Metadata Badges | Visual badges indicating default branch, commit hash, tag dates | M1 | ORIGINAL_REQUEST §R1 | DONE |
+| 4 | R1.4 Ref Selector Accessibility | Popover dismissal on Escape/click-outside and keyboard navigation | M1 | ORIGINAL_REQUEST §R1 | DONE |
+| 5 | R2.1 Blame History Traversal | In-browser backward commit chain traversal with blob equality check | M2 | ORIGINAL_REQUEST §R2 | DONE |
+| 6 | R2.2 Myers Line Attribution | Line-by-line attribution mapping to commit SHA, author, timestamp | M2 | ORIGINAL_REQUEST §R2 | DONE |
+| 7 | R2.3 Interactive BlameView UI | Blame UI with author avatars/names, commit hashes, age heatmap | M2 | ORIGINAL_REQUEST §R2 | DONE |
+| 8 | R2.4 Blame Commit Diff Links | Clickable links to committing diff view from blame hunks | M2 | ORIGINAL_REQUEST §R2 | DONE |
+| 9 | R2.5 Code / Blame Mode Toggle | Toggle button in BlobView switching between Code and Blame views | M2 | ORIGINAL_REQUEST §R2 | DONE |
+| 10 | R3.1 Hash Line Highlighting | URL hash-based line selection (#L42, #L10-L25) with visual highlighting | M3 | ORIGINAL_REQUEST §R3 | DONE |
+| 11 | R3.2 Multi-Line Selection | Shift-clicking line numbers to select and highlight ranges | M3 | ORIGINAL_REQUEST §R3 | DONE |
+| 12 | R3.3 Immutable Permalinks | Copy permalink button linking to commit SHA + path + line range | M3 | ORIGINAL_REQUEST §R3 | DONE |
+| 13 | R3.4 Deep Link Auto-Scroll | Auto-scroll to selected line range on page load and hashchange | M3 | ORIGINAL_REQUEST §R3 | DONE |
+| 14 | R4.1 Raw Blob View & Download | Raw button for direct blob viewing and downloading | M4 | ORIGINAL_REQUEST §R4 | DONE |
+| 15 | R4.2 Client-Side ZIP Archive | Browser-side .zip snapshot archive generator with deflate/CRC32 | M4 | ORIGINAL_REQUEST §R4 | DONE |
+| 16 | R4.3 Client-Side Tarball Archive | Browser-side .tar.gz snapshot archive generator (POSIX ustar + gzip)| M4 | ORIGINAL_REQUEST §R4 | DONE |
+| 17 | R4.4 Snapshot Download UI | Download button in UI for downloading repo snapshot as ZIP/Tarball | M4 | ORIGINAL_REQUEST §R4 | DONE |
+| 18 | R5.1 Strict Rust Safety | #![forbid(unsafe_code)], zero unwraps/panics, 0 Clippy warnings | M5 | ORIGINAL_REQUEST §R5 | DONE |
+| 19 | R5.2 Strict TypeScript Safety | strict: true, zero any, @typescript-eslint/strict-type-checked | M5 | ORIGINAL_REQUEST §R5 | DONE |
+| 20 | R5.3 Vitest Unit Test Suite | Comprehensive unit tests for RefSelector, Blame, Permalinks, Archive | M5 | ORIGINAL_REQUEST §R5 | DONE |
+| 21 | R5.4 Multi-Tier E2E Verification | 100% pass across E2E test suite with Tier 5 adversarial hardening | M5 | ORIGINAL_REQUEST §R5 | DONE |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| E2E | E2E Testing Track | Automated Test Runner & 4-tier E2E Test Suite (Tiers 1-4), creates `TEST_READY.md` | none | DONE |
-| M1 | Rust Core CLI, Hook & Exporter | Rust crate `sendforge`: CLI (`init`, `hook`, `update`), dumb HTTP `info/refs`, `meta.json`, zero-JS HTML fallback pre-rendering, safe Rust | none | DONE |
-| M2 | TypeScript Git Engine & UI | Frontend package: loose object fetcher, zlib inflator, commit/tree/blob parsers, Web Worker diffing, Preact SPA UI, strict TS/Vitest | none | DONE |
-| M3 | Static Server & Static Export | `sendforge serve` (CORS, dumb HTTP, Range requests) and `sendforge export` standalone generator | M1, M2 | DONE |
-| M4 | Final E2E Pass & Adversarial Hardening | Phase 1: 100% pass across E2E Tiers 1-4 (118/118); Phase 2: Tier 5 adversarial stress testing | E2E, M1, M2, M3 | DONE |
-
----
+| M1 | Tabbed Ref Selector | `RefSelector.tsx`, types update, fuzzy search, badges, keyboard nav, unit tests | none | DONE |
+| M2 | In-Browser git blame & BlameView | `blame.ts`, `BlameView.tsx`, Myers diff attribution, heatmap, toggle in `BlobView.tsx`, unit tests | none | DONE |
+| M3 | File Permalinks & Line Highlighting | URL hash parsing, single/shift-click line selection, CSS styles, copy permalink button, auto-scroll, unit tests | none | DONE |
+| M4 | Raw File & Snapshot Archive Generation | `archive.ts` (ZIP + TAR.GZ), raw download button, snapshot export UI in `BlobView.tsx` / `App.tsx`, unit tests | none | DONE |
+| M5 | Final Milestone: Full E2E & Verification | App.tsx integration, Vitest suite 100% pass, Tiers 1-4 E2E 100% pass, Tier 5 Adversarial Coverage Hardening | M1, M2, M3, M4 | DONE |
 
 ## Interface Contracts
 
-### 1. File Layout in Bare Repository
-```text
-<repo>.git/
-├── HEAD
-├── config
-├── refs/
-│   ├── heads/
-│   └── tags/
-├── info/
-│   └── refs
-├── objects/
-│   ├── [0-9a-f]{2}/[0-9a-f]{38}
-│   └── pack/
-└── static/
-    ├── meta.json
-    ├── index.html
-    └── log.html
-```
-
-### 2. `meta.json` Schema Contract
-```json
-{
-  "name": "string",
-  "description": "string | null",
-  "default_branch": "string",
-  "branches": [
-    { "name": "string", "target": "string (40-hex SHA-1)", "is_default": "boolean" }
-  ],
-  "tags": [
-    { "name": "string", "target": "string (40-hex SHA-1)", "is_annotated": "boolean", "peeled": "string | null" }
-  ],
-  "head": {
-    "ref": "string",
-    "sha": "string (40-hex SHA-1)"
-  },
-  "stats": {
-    "commit_count": "number",
-    "branch_count": "number",
-    "tag_count": "number"
-  },
-  "has_readme": "boolean",
-  "readme_filename": "string | null",
-  "updated_at": "string (ISO 8601 UTC)"
+### 1. `RefSelector.tsx` ↔ `App.tsx`
+```typescript
+export interface RefSelectorProps {
+  currentRef: string;
+  branches: RepoBranch[];
+  tags: RepoTag[];
+  onSelectRef: (refName: string) => void;
+  defaultBranch?: string;
 }
 ```
 
-### 3. Web Worker Diff RPC Protocol
-- Request:
-  ```ts
-  type DiffWorkerRequest = {
-    id: string;
-    type: 'COMPUTE_DIFF';
-    oldPath: string;
-    newPath: string;
-    oldContent: string;
-    newContent: string;
-    contextLines?: number;
-  };
-  ```
-- Response:
-  ```ts
-  type DiffWorkerResponse = {
-    id: string;
-    type: 'DIFF_RESULT';
-    oldPath: string;
-    newPath: string;
-    hunks: DiffHunk[];
-    stats: { additions: number; deletions: number };
-  } | {
-    id: string;
-    type: 'DIFF_ERROR';
-    error: string;
-  };
-  ```
+### 2. `blame.ts` ↔ `BlameView.tsx` / `GitRepositoryClient`
+```typescript
+export interface BlameLineInfo {
+  lineNumber: number;
+  commitOid: string;
+  authorName: string;
+  authorEmail: string;
+  timestamp: number;
+  summary: string;
+}
 
----
+export interface BlameHunk {
+  commitOid: string;
+  authorName: string;
+  authorEmail: string;
+  timestamp: number;
+  summary: string;
+  startLine: number;
+  lineCount: number;
+}
+
+export interface BlameResult {
+  lines: BlameLineInfo[];
+  hunks: BlameHunk[];
+  oldestTimestamp: number;
+  newestTimestamp: number;
+}
+
+export async function computeBlame(
+  client: GitRepositoryClient,
+  commitOid: string,
+  filePath: string,
+  onProgress?: (visitedCommits: number) => void
+): Promise<BlameResult>;
+```
+
+### 3. `archive.ts` ↔ `App.tsx` / `BlobView.tsx`
+```typescript
+export interface ArchiveFileEntry {
+  path: string;
+  data: Uint8Array;
+  mode?: number; // default: 0o100644 or 0o100755
+}
+
+export function createZipArchive(
+  prefix: string,
+  files: ArchiveFileEntry[]
+): Uint8Array;
+
+export function createTarGzArchive(
+  prefix: string,
+  files: ArchiveFileEntry[]
+): Uint8Array;
+
+export function triggerDownload(
+  filename: string,
+  data: Uint8Array | Blob,
+  mimeType: string
+): void;
+```
+
+### 4. Permalinks & Hash Utils (`utils.ts`)
+```typescript
+export interface LineRange {
+  start: number;
+  end: number;
+}
+
+export function parseLineHash(hash: string): LineRange | null;
+export function formatLineHash(start: number, end?: number): string;
+export function buildPermalinkUrl(
+  repoName: string,
+  commitOid: string,
+  filePath: string,
+  range?: LineRange
+): string;
+```
 
 ## Code Layout
-```text
-/Users/mike10010100/git/hybrid-gitforge/
-├── Cargo.toml                    # Workspace Cargo manifest (sendforge CLI & core crate)
-├── src/                          # Rust source code
-│   ├── main.rs                   # CLI entrypoint (clap subcommands: init, hook, update, export, serve)
-│   ├── lib.rs                    # Core library entrypoint with #![forbid(unsafe_code)]
-│   ├── error.rs                  # Typed error handling (thiserror)
-│   ├── repo/                     # Bare Git repo operations & dumb HTTP info generator
-│   ├── hook/                     # Post-receive hook logic & ref update processing
-│   ├── meta/                     # meta.json generation and serialization
-│   ├── prerender/                # Static HTML fallback generator & CommonMark markdown renderer
-│   ├── server/                   # Local static HTTP server (CORS, Range, dumb HTTP, multi-candidate resolution)
-│   └── export/                   # Standalone static directory exporter
-├── tests/                        # Rust integration tests & adversarial suites
-├── package.json                  # Frontend TypeScript workspace
-├── tsconfig.json                 # Strict TypeScript configuration
-├── eslint.config.js              # Strict TypeScript ESLint configuration
-├── vite.config.ts                # Vite build & bundle configuration
-├── vitest.config.ts              # Vitest test runner configuration
-├── client/                       # Frontend TypeScript application
-│   ├── src/
-│   │   ├── engine/               # In-browser Git engine (fetcher, inflator, parser, types)
-│   │   ├── worker/               # Web Worker off-thread Myers diffing (diff.worker.ts, diff-client.ts)
-│   │   ├── ui/                   # Reactive UI components (App, TreeView, BlobView, CommitLog, DiffView, FileFinder)
-│   │   └── index.html            # SPA entry template
-│   └── tests/                    # Vitest unit test suites & binary fixtures
-└── e2e/                          # Automated E2E Test Suite (Tiers 1-4, 118 test cases)
-    ├── harness/                  # E2E test runner, supervisor, git repo generator, html validator
-    ├── tier1_features/           # Tier 1: 16 Feature isolation test suites (89 test cases)
-    ├── tier2_boundaries/         # Tier 2: 12 Boundary & Corner case suites (20 test cases)
-    ├── tier3_combinations/       # Tier 3: 5 Cross-feature combination workflows
-    └── tier4_workloads/          # Tier 4: 4 Real-world workloads & scraper floods
-```
+- `client/src/ui/RefSelector.tsx` — Tabbed Ref Selector popover component (M1 - DONE)
+- `client/src/engine/blame.ts` — In-browser backward commit chain blame engine (M2 - DONE)
+- `client/src/ui/BlameView.tsx` — Interactive blame view with heatmaps and diff links (M2 - DONE)
+- `client/src/ui/utils.ts` — URL hash parsing/formatting and permalink utilities (M3 - DONE)
+- `client/src/engine/archive.ts` — Zero-dependency ZIP and POSIX ustar tar.gz binary serializer (M4 - DONE)
+- `client/src/ui/BlobView.tsx` — Blob viewer with permalinks, code/blame toggle, raw download, and archive export (M2, M3, M4 - DONE)
+- `client/src/ui/App.tsx` — Main application shell integrating RefSelector, routing, and header actions (M1, M4, M5 - DONE)
+- `client/src/ui/styles.css` — CSS styles for ref selector popover, blame view, heatmaps, line highlights, and archive export (M1, M2, M3, M4 - DONE)
+- `client/tests/unit/` — Unit tests for ref selector, blame, permalinks, and archive generation (M1, M2, M3, M4, M5 - DONE)
+- `e2e/` — Multi-tier opaque-box E2E test suite (E2E Testing Track - TEST_READY.md published)

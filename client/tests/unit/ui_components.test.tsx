@@ -96,6 +96,18 @@ describe('UI Components & Renderers', () => {
 
     const binaryHtml = render(<BlobView blob={binaryBlob} path="image.png" />);
     expect(binaryHtml).toContain('Binary file');
+
+    const withPropsHtml = render(
+      <BlobView
+        blob={textBlob}
+        path="src/index.ts"
+        commitOid="1111111111111111111111111111111111111111"
+        onSelectCommit={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    expect(withPropsHtml).toContain('Blame');
+    expect(withPropsHtml).toContain('src/index.ts');
   });
 
   it('renders CommitLog component with commit details and GPG badge', () => {

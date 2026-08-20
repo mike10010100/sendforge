@@ -124,21 +124,19 @@ function myersDiffMiddle(
   const v = new Map<number, number>();
   v.set(1, 0);
 
-  const trace: (readonly [number, number, number])[][] = [];
+  const trace: Map<number, number>[] = [];
 
   let foundD = -1;
   for (let d = 0; d <= max; d++) {
-    const snapshot: [number, number, number][] = [];
     for (let k = -d; k <= d; k += 2) {
       let x: number;
-      if (k === -d || (k !== d && (v.get(k - 1) ?? 0) < (v.get(k + 1) ?? 0))) {
+      if (k === -d || (k !== d && (v.get(k - 1) ?? -1) < (v.get(k + 1) ?? -1))) {
         x = v.get(k + 1) ?? 0;
       } else {
         x = (v.get(k - 1) ?? 0) + 1;
       }
 
       let y = x - k;
-      snapshot.push([k, x, y]);
 
       while (x < n && y < m && a[x] === b[y]) {
         x++;
@@ -149,14 +147,17 @@ function myersDiffMiddle(
 
       if (x >= n && y >= m) {
         foundD = d;
-        trace.push(snapshot);
         break;
       }
     }
+    trace.push(new Map(v));
     if (foundD !== -1) {
       break;
     }
-    trace.push(snapshot);
+  }
+
+  if (foundD === -1) {
+    foundD = trace.length - 1;
   }
 
   // Backtrack edit script
@@ -164,45 +165,29 @@ function myersDiffMiddle(
   let y = m;
   const script: EditOp[] = [];
 
-  for (let d = trace.length - 1; d >= 0; d--) {
+  for (let d = foundD; d > 0; d--) {
     const k = x - y;
+    const vPrev = trace[d - 1];
+    if (!vPrev) break;
+
     let prevK: number;
-    if (d === 0) {
-      // Base case
-      while (x > 0 && y > 0) {
-        x--;
-        y--;
-        script.unshift({
-          type: 'context',
-          oldIndex: oldOffset + x,
-          newIndex: newOffset + y,
-          line: a[x] ?? '',
-        });
-      }
-      break;
-    }
-
-    const prevSnapshotMap = new Map<number, number>();
-    const prevSnapshot = trace[d - 1];
-    if (prevSnapshot) {
-      for (const [pk, px] of prevSnapshot) {
-        prevSnapshotMap.set(pk, px);
-      }
-    }
-
-    if (k === -d || (k !== d && (prevSnapshotMap.get(k - 1) ?? 0) < (prevSnapshotMap.get(k + 1) ?? 0))) {
+    if (k === -d || (k !== d && (vPrev.get(k - 1) ?? -1) < (vPrev.get(k + 1) ?? -1))) {
       prevK = k + 1;
     } else {
       prevK = k - 1;
     }
 
-    const prevX = prevSnapshotMap.get(prevK) ?? 0;
+    const prevX = vPrev.get(prevK) ?? 0;
     const prevY = prevX - prevK;
 
-    while (x > prevX && y > prevY) {
+    const xStart = prevK === k + 1 ? prevX : prevX + 1;
+    const yStart = prevK === k + 1 ? prevY + 1 : prevY;
+
+    // Follow snake backwards from (x, y) to (xStart, yStart)
+    while (x > xStart && y > yStart) {
       x--;
       y--;
-      script.unshift({
+      script.push({
         type: 'context',
         oldIndex: oldOffset + x,
         newIndex: newOffset + y,
@@ -210,27 +195,40 @@ function myersDiffMiddle(
       });
     }
 
-    if (d > 0) {
-      if (x === prevX) {
-        // Insertion from b
-        y--;
-        script.unshift({
-          type: 'add',
-          newIndex: newOffset + y,
-          line: b[y] ?? '',
-        });
-      } else {
-        // Deletion from a
-        x--;
-        script.unshift({
-          type: 'delete',
-          oldIndex: oldOffset + x,
-          line: a[x] ?? '',
-        });
-      }
+    // Process edit step from (prevX, prevY) to (xStart, yStart)
+    if (prevK === k + 1) {
+      // Insertion from b
+      script.push({
+        type: 'add',
+        newIndex: newOffset + prevY,
+        line: b[prevY] ?? '',
+      });
+    } else {
+      // Deletion from a
+      script.push({
+        type: 'delete',
+        oldIndex: oldOffset + prevX,
+        line: a[prevX] ?? '',
+      });
     }
+
+    x = prevX;
+    y = prevY;
   }
 
+  // Base case d = 0: any remaining diagonal snake back to (0, 0)
+  while (x > 0 && y > 0) {
+    x--;
+    y--;
+    script.push({
+      type: 'context',
+      oldIndex: oldOffset + x,
+      newIndex: newOffset + y,
+      line: a[x] ?? '',
+    });
+  }
+
+  script.reverse();
   return script;
 }
 

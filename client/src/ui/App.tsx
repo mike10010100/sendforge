@@ -13,6 +13,7 @@ import { BlobView } from './BlobView.js';
 import { CommitLog } from './CommitLog.js';
 import { DiffView } from './DiffView.js';
 import { FileFinder } from './FileFinder.js';
+import { RefSelector } from './RefSelector.js';
 import { TreeView } from './TreeView.js';
 
 export interface AppProps {
@@ -36,6 +37,9 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
   const [allFiles, setAllFiles] = useState<readonly TreeFileItem[]>([]);
 
   const [isFinderOpen, setIsFinderOpen] = useState(false);
+  const [isDownloadOpen, setIsDownloadOpen] = useState(false);
+  const [downloadingFormat, setDownloadingFormat] = useState<'zip' | 'tar.gz' | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<{ completed: number; total: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -252,6 +256,62 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
     };
   }, [isFinderOpen]);
 
+  // Snapshot download dropdown dismissal on click-outside and Escape
+  useEffect(() => {
+    if (!isDownloadOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target?.closest('.download-dropdown-container')) {
+        setIsDownloadOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsDownloadOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isDownloadOpen]);
+
+  const handleDownloadSnapshot = async (format: 'zip' | 'tar.gz') => {
+    if (!currentCommit || downloadingFormat !== null) return;
+    setIsDownloadOpen(false);
+    setDownloadingFormat(format);
+    setDownloadProgress({ completed: 0, total: 0 });
+
+    try {
+      const { exportRepositorySnapshot, triggerDownload } = await import('../engine/archive.js');
+      const repoName = meta?.name ?? 'repo';
+      const sanitizedRef = currentRef.replace(/\//g, '-');
+      const prefix = `${repoName}-${sanitizedRef}`;
+      const filename = `${prefix}.${format === 'zip' ? 'zip' : 'tar.gz'}`;
+      const mimeType = format === 'zip' ? 'application/zip' : 'application/gzip';
+
+      const archiveData = await exportRepositorySnapshot(
+        client,
+        currentCommit.tree,
+        prefix,
+        format,
+        (completed, total) => {
+          setDownloadProgress({ completed, total });
+        }
+      );
+
+      triggerDownload(filename, archiveData, mimeType);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`Failed to generate ${format.toUpperCase()} archive: ${msg}`);
+    } finally {
+      setDownloadingFormat(null);
+      setDownloadProgress(null);
+    }
+  };
+
   const handleNavigatePath = (newPath: string, isTree: boolean) => {
     setActiveTab('code');
     if (isTree) {
@@ -360,31 +420,83 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
 
         <div className="controls-bar">
           <div className="ref-selector-container">
-            <label htmlFor="ref-select" style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              Branch / Tag:
-            </label>
-            <select
-              id="ref-select"
-              className="select-input"
-              value={currentRef}
-              onChange={(e) => {
-                const targetRef = e.currentTarget.value;
+            <RefSelector
+              currentRef={currentRef}
+              branches={meta?.branches ?? []}
+              tags={meta?.tags ?? []}
+              defaultBranch={meta?.default_branch ?? 'main'}
+              onSelectRef={(targetRef) => {
+                if (targetRef === currentRef) return;
                 setCurrentRef(targetRef);
                 setCurrentPath('');
                 void loadRefState(targetRef, '');
               }}
-            >
-              {meta?.branches.map((b) => (
-                <option key={`branch-${b.name}`} value={b.name}>
-                  🌿 {b.name} {b.is_default ? '(default)' : ''}
-                </option>
-              ))}
-              {meta?.tags.map((t) => (
-                <option key={`tag-${t.name}`} value={t.name}>
-                  🏷️ {t.name}
-                </option>
-              ))}
-            </select>
+            />
+
+            <div className="download-dropdown-container">
+              <button
+                type="button"
+                className={`btn download-btn ${isDownloadOpen ? 'active' : ''}`}
+                onClick={() => {
+                  setIsDownloadOpen((prev) => !prev);
+                }}
+                disabled={downloadingFormat !== null || !currentCommit}
+                title="Download repository snapshot archive"
+                data-testid="download-snapshot-btn"
+              >
+                {downloadingFormat ? (
+                  <>
+                    <span className="download-spinner" />
+                    <span>
+                      {downloadProgress && downloadProgress.total > 0
+                        ? `Archiving (${downloadProgress.completed}/${downloadProgress.total})...`
+                        : `Generating ${downloadingFormat.toUpperCase()}...`}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span>⬇️ Code / Download</span>
+                    <span className="dropdown-arrow">▾</span>
+                  </>
+                )}
+              </button>
+
+              {isDownloadOpen && (
+                <div className="download-dropdown-menu" role="menu">
+                  <div className="download-dropdown-header">Clone or download snapshot</div>
+                  <button
+                    type="button"
+                    className="download-dropdown-item"
+                    role="menuitem"
+                    onClick={() => {
+                      void handleDownloadSnapshot('zip');
+                    }}
+                    data-testid="download-zip-btn"
+                  >
+                    <span className="download-format-icon">📦</span>
+                    <div className="download-format-details">
+                      <span className="download-format-title">Download ZIP (.zip)</span>
+                      <span className="download-format-desc">Standard PKWARE zip compressed archive</span>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    className="download-dropdown-item"
+                    role="menuitem"
+                    onClick={() => {
+                      void handleDownloadSnapshot('tar.gz');
+                    }}
+                    data-testid="download-targz-btn"
+                  >
+                    <span className="download-format-icon">🗜️</span>
+                    <div className="download-format-details">
+                      <span className="download-format-title">Download TAR.GZ (.tar.gz)</span>
+                      <span className="download-format-desc">POSIX ustar gzipped tarball archive</span>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="breadcrumbs">
@@ -433,6 +545,11 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
             <BlobView
               blob={currentBlob}
               path={currentPath}
+              client={client}
+              commitOid={currentCommit?.oid ?? currentRef}
+              onSelectCommit={(sha) => {
+                void loadCommitDiff(sha);
+              }}
               onBack={() => {
                 const parentPath = pathSegments.slice(0, -1).join('/');
                 handleNavigatePath(parentPath, true);

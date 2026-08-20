@@ -1,0 +1,45 @@
+name: Deploy to Cloudflare Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build Frontend SPA
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build Sendforge CLI
+        run: cargo build --release
+
+      - name: Export Static Site
+        run: |
+          # Convert current repository clone to bare repo for export
+          git clone --bare . /tmp/bare-repo.git
+          ./target/release/sendforge export /tmp/bare-repo.git ./public-dist --frontend-dist ./dist
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy ./public-dist --project-name=sendforge

@@ -151,3 +151,148 @@ function formatInlineMarkdown(text: string): string {
   );
   return res;
 }
+
+/**
+ * Calculates a normalized age fraction [0.0, 1.0] where 1.0 represents the newest commit
+ * and 0.0 represents the oldest commit in the blame scope.
+ */
+export function calculateAgeFraction(
+  timestamp: number,
+  oldestTimestamp: number,
+  newestTimestamp: number
+): number {
+  if (newestTimestamp <= oldestTimestamp) {
+    return 1.0;
+  }
+  const fraction = (timestamp - oldestTimestamp) / (newestTimestamp - oldestTimestamp);
+  return Math.max(0, Math.min(1, fraction));
+}
+
+/**
+ * Calculates normalized linear intensity between 0.0 (oldest) and 1.0 (newest).
+ * Returns 0.5 when timestamps are invalid or identical.
+ */
+export function calculateHeatmapIntensity(
+  timestamp: number,
+  oldestTimestamp: number,
+  newestTimestamp: number
+): number {
+  if (!timestamp || Number.isNaN(timestamp)) {
+    return 0.5;
+  }
+  if (oldestTimestamp === newestTimestamp) {
+    return 0.5;
+  }
+  const fraction = (timestamp - oldestTimestamp) / (newestTimestamp - oldestTimestamp);
+  return Math.max(0, Math.min(1, fraction));
+}
+
+/**
+ * Maps an age fraction to CSS colors for the blame heatmap border and background tint.
+ * - Newest commits receive a vivid accent border with higher opacity.
+ * - Oldest commits receive a calm, muted slate border with lower opacity.
+ */
+export function getHeatmapColor(ageFraction: number): {
+  borderColor: string;
+  bgColor: string;
+} {
+  const clamped = Math.max(0, Math.min(1, Number.isFinite(ageFraction) ? ageFraction : 0.5));
+  const borderAlpha = 0.25 + clamped * 0.75;
+  const bgAlpha = 0.02 + clamped * 0.06;
+
+  return {
+    borderColor: `rgba(88, 166, 255, ${borderAlpha.toFixed(2)})`,
+    bgColor: `rgba(56, 139, 253, ${bgAlpha.toFixed(3)})`,
+  };
+}
+
+/**
+ * Extracts 1-2 uppercase initial characters from an author's name.
+ * e.g. "Linus Torvalds" -> "LT", "Alice" -> "AL", "bob" -> "BO", "" -> "??"
+ */
+export function getAuthorInitials(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return '??';
+  const parts = trimmed.split(/[\s-]+/).filter(Boolean);
+  if (parts.length === 0) return '??';
+  if (parts.length === 1) {
+    const chars = Array.from(parts[0] ?? '');
+    const single = chars.slice(0, 2).join('');
+    return single.toUpperCase() || '??';
+  }
+  const firstChars = Array.from(parts[0] ?? '');
+  const lastChars = Array.from(parts[parts.length - 1] ?? '');
+  const first = firstChars[0] ?? '';
+  const last = lastChars[0] ?? '';
+  return (first + last).toUpperCase() || '??';
+}
+
+/**
+ * Deterministically generates an accessible, vibrant HSL color string for an avatar
+ * based on the author's name and email.
+ */
+export function getAuthorColor(name: string, email?: string): string {
+  const seed = (email !== undefined && email !== '' ? email : (name !== '' ? name : 'default-author')).toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash << 5) - hash + seed.charCodeAt(i);
+    hash |= 0;
+  }
+  const hue = Math.abs(hash) % 360;
+  return `hsl(${hue}, 55%, 42%)`;
+}
+
+
+/**
+ * Extracts the subject line (first line) of a commit message.
+ */
+export function formatCommitSummary(message: string): string {
+  if (!message) return '';
+  const firstLine = message.split(/\r?\n/)[0] ?? '';
+  return firstLine.trim();
+}
+
+/**
+ * Represents a 1-based inclusive range of lines in a file.
+ */
+export interface LineRange {
+  readonly start: number;
+  readonly end: number;
+}
+
+export function parseLineHash(hash: string): LineRange | null {
+  if (!hash) return null;
+  const m = /(?:^|[#/])[lL](\d+)(?:-[lL](\d+))?$/i.exec(hash);
+  if (!m?.[1]) return null;
+  const s = parseInt(m[1], 10);
+  const e = m[2] !== undefined ? parseInt(m[2], 10) : s;
+  if (Number.isNaN(s) || Number.isNaN(e) || s < 1 || e < 1) return null;
+  return { start: Math.min(s, e), end: Math.max(s, e) };
+}
+
+export function formatLineHash(start: number, end?: number): string {
+  if (!start || !Number.isFinite(start) || start < 1) return '';
+  if (end === undefined || !Number.isFinite(end) || end < 1 || end === start) {
+    return `#L${Math.floor(start)}`;
+  }
+  const min = Math.floor(Math.min(start, end));
+  const max = Math.floor(Math.max(start, end));
+  return min === max ? `#L${min}` : `#L${min}-L${max}`;
+}
+
+export function buildPermalinkUrl(
+  repoNameOrCommit: string,
+  commitOidOrFilePath: string,
+  filePathOrRange?: string | LineRange | null,
+  maybeRange?: LineRange | null
+): string {
+  const is4 = typeof filePathOrRange === 'string';
+  const commitOid = is4 ? commitOidOrFilePath : repoNameOrCommit;
+  const filePath = is4 ? filePathOrRange : commitOidOrFilePath;
+  const range = is4 ? maybeRange : filePathOrRange;
+  const cleanPath = filePath.replace(/^\/+/, '');
+  const hash = range && range.start >= 1 ? formatLineHash(range.start, range.end) : '';
+  return `#/commit/${commitOid}/blob/${cleanPath}${hash}`;
+}
+
+

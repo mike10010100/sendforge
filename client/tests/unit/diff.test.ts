@@ -91,4 +91,72 @@ describe('Diff Engine & Myers Algorithm', () => {
     expect(lineTypes).toContain('add');
     expect(lineTypes).toContain('context');
   });
+
+  it('guarantees every context edit op matches identical lines across tricky middle mutations', () => {
+    const oldLines = [
+      'Initial line 1',
+      'Initial line 2',
+      'Initial line 3',
+      'Bob replacement line A',
+      'Bob replacement line B',
+      'Initial line 8',
+      'Initial line 9',
+      'Initial line 10',
+    ];
+    const newLines = [
+      'Charlie top 1',
+      'Charlie top 2',
+      'Initial line 1',
+      'Initial line 2',
+      'Initial line 3',
+      'Bob replacement line A',
+      'Bob replacement line B',
+      'Initial line 8',
+      'Initial line 9',
+    ];
+
+    const ops = computeEditSequence(oldLines, newLines);
+
+    // Validate that every context op has identical strings in old and new
+    for (const op of ops) {
+      if (op.type === 'context') {
+        expect(op.oldIndex).toBeDefined();
+        expect(op.newIndex).toBeDefined();
+        if (op.oldIndex !== undefined && op.newIndex !== undefined) {
+          expect(oldLines[op.oldIndex]).toBe(newLines[op.newIndex]);
+          expect(op.line).toBe(oldLines[op.oldIndex]);
+        }
+      }
+    }
+
+    // Validate edit script reconstructs newLines from oldLines
+    const reconstructed: string[] = [];
+    for (const op of ops) {
+      if (op.type === 'context' || op.type === 'add') {
+        reconstructed.push(op.line);
+      }
+    }
+    expect(reconstructed).toEqual(newLines);
+  });
+
+  it('handles complete swaps, interleaving, and empty lines accurately', () => {
+    const oldLines = ['alpha', 'beta', 'gamma', '', 'delta', 'epsilon'];
+    const newLines = ['epsilon', 'delta', '', 'gamma', 'beta', 'alpha'];
+
+    const ops = computeEditSequence(oldLines, newLines);
+
+    for (const op of ops) {
+      if (op.type === 'context' && op.oldIndex !== undefined && op.newIndex !== undefined) {
+        expect(oldLines[op.oldIndex]).toBe(newLines[op.newIndex]);
+      }
+    }
+
+    const reconstructed: string[] = [];
+    for (const op of ops) {
+      if (op.type === 'context' || op.type === 'add') {
+        reconstructed.push(op.line);
+      }
+    }
+    expect(reconstructed).toEqual(newLines);
+  });
 });
