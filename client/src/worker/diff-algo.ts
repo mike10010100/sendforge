@@ -1,15 +1,21 @@
+import type { GitRepositoryClient } from '../engine/fetcher.js';
+import type { GitTreeEntry } from '../engine/types.js';
+import { diffClient } from './diff-client.js';
 import type {
+  DiffBatchItemInput,
   DiffHunk,
   DiffLine,
   FileDiff,
   FileDiffStats,
+  FileDiffSummary,
+  ReviewNote,
   SplitDiffRow,
 } from './diff-types.js';
 
 interface EditOp {
   readonly type: 'context' | 'add' | 'delete';
-  readonly oldIndex?: number; // 0-indexed in oldLines
-  readonly newIndex?: number; // 0-indexed in newLines
+  readonly oldIndex?: number | undefined; // 0-indexed in oldLines
+  readonly newIndex?: number | undefined; // 0-indexed in newLines
   readonly line: string;
 }
 
@@ -457,7 +463,7 @@ export function computeFileDiff(
     };
   }
 
-  // Handle completely newly created file
+  // Handle newly created file
   if (oldText === null && newText !== null) {
     const lines = newText.split(/\r?\n/);
     const diffLines: DiffLine[] = lines.map((line, idx) => ({
@@ -489,7 +495,7 @@ export function computeFileDiff(
     };
   }
 
-  // Handle completely deleted file
+  // Handle deleted file
   if (oldText !== null && newText === null) {
     const lines = oldText.split(/\r?\n/);
     const diffLines: DiffLine[] = lines.map((line, idx) => ({
@@ -559,4 +565,408 @@ export function computeFileDiff(
     hunks,
     splitRows,
   };
+}
+
+/**
+ * Recursively computes the file-level difference between two Git commit trees.
+ * Identifies added ('added'), deleted ('deleted'), and modified ('modified') files,
+ * including mode changes (e.g. executable bit) and binary vs text detection.
+ */
+export async function computeTreeDiff(
+  client: GitRepositoryClient,
+  baseCommitSha: string | null,
+  headCommitSha: string | null
+): Promise<readonly FileDiffSummary[]> {
+  if (baseCommitSha === headCommitSha && baseCommitSha !== null) {
+    return [];
+  }
+
+  let baseTreeOid: string | null = null;
+  if (baseCommitSha && baseCommitSha !== '0000000000000000000000000000000000000000') {
+    try {
+      const baseCommit = await client.getCommit(baseCommitSha);
+      baseTreeOid = baseCommit.tree;
+    } catch {
+      baseTreeOid = null;
+    }
+  }
+
+  let headTreeOid: string | null = null;
+  if (headCommitSha && headCommitSha !== '0000000000000000000000000000000000000000') {
+    try {
+      const headCommit = await client.getCommit(headCommitSha);
+      headTreeOid = headCommit.tree;
+    } catch {
+      headTreeOid = null;
+    }
+  }
+
+  if (baseTreeOid === headTreeOid && baseTreeOid !== null) {
+    return [];
+  }
+
+  const results: FileDiffSummary[] = [];
+
+  const walk = async (
+    bOid: string | null,
+    hOid: string | null,
+    prefix: string
+  ): Promise<void> => {
+    if (bOid === hOid && bOid !== null) {
+      return;
+    }
+
+    const baseTree = bOid ? await client.getTree(bOid) : null;
+    const headTree = hOid ? await client.getTree(hOid) : null;
+
+    const baseMap = new Map<string, GitTreeEntry>();
+    if (baseTree) {
+      for (const entry of baseTree.entries) {
+        baseMap.set(entry.name, entry);
+      }
+    }
+
+    const headMap = new Map<string, GitTreeEntry>();
+    if (headTree) {
+      for (const entry of headTree.entries) {
+        headMap.set(entry.name, entry);
+      }
+    }
+
+    const allNames = new Set<string>([...baseMap.keys(), ...headMap.keys()]);
+
+    for (const name of allNames) {
+      const bEntry = baseMap.get(name);
+      const hEntry = headMap.get(name);
+      const currentPath = prefix ? `${prefix}/${name}` : name;
+
+      if (!bEntry && hEntry) {
+        // Added in head
+        if (hEntry.isTree) {
+          await walk(null, hEntry.oid, currentPath);
+        } else {
+          let isBinary = false;
+          try {
+            const blob = await client.getBlob(hEntry.oid);
+            isBinary = blob.isBinary;
+          } catch {
+            isBinary = false;
+          }
+
+          results.push({
+            status: 'added',
+            oldPath: null,
+            newPath: currentPath,
+            oldOid: null,
+            newOid: hEntry.oid,
+            oldMode: null,
+            newMode: hEntry.mode,
+            isBinary,
+          });
+        }
+      } else if (bEntry && !hEntry) {
+        // Deleted in head
+        if (bEntry.isTree) {
+          await walk(bEntry.oid, null, currentPath);
+        } else {
+          let isBinary = false;
+          try {
+            const blob = await client.getBlob(bEntry.oid);
+            isBinary = blob.isBinary;
+          } catch {
+            isBinary = false;
+          }
+
+          results.push({
+            status: 'deleted',
+            oldPath: currentPath,
+            newPath: null,
+            oldOid: bEntry.oid,
+            newOid: null,
+            oldMode: bEntry.mode,
+            newMode: null,
+            isBinary,
+          });
+        }
+      } else if (bEntry && hEntry) {
+        // Both exist
+        if (bEntry.isTree && hEntry.isTree) {
+          if (bEntry.oid !== hEntry.oid) {
+            await walk(bEntry.oid, hEntry.oid, currentPath);
+          }
+        } else if (!bEntry.isTree && !hEntry.isTree) {
+          if (bEntry.oid !== hEntry.oid || bEntry.mode !== hEntry.mode) {
+            let isBinary = false;
+            try {
+              const bBlob = await client.getBlob(bEntry.oid);
+              const hBlob = await client.getBlob(hEntry.oid);
+              isBinary = bBlob.isBinary || hBlob.isBinary;
+            } catch {
+              isBinary = false;
+            }
+
+            const modeChanged = bEntry.mode !== hEntry.mode;
+            results.push({
+              status: 'modified',
+              oldPath: currentPath,
+              newPath: currentPath,
+              oldOid: bEntry.oid,
+              newOid: hEntry.oid,
+              oldMode: bEntry.mode,
+              newMode: hEntry.mode,
+              modeChanged,
+              isBinary,
+            });
+          }
+        } else {
+          // Type change: directory replaced with file or vice versa
+          if (bEntry.isTree) {
+            await walk(bEntry.oid, null, currentPath);
+          } else {
+            let isBinary = false;
+            try {
+              const blob = await client.getBlob(bEntry.oid);
+              isBinary = blob.isBinary;
+            } catch {
+              isBinary = false;
+            }
+            results.push({
+              status: 'deleted',
+              oldPath: currentPath,
+              newPath: null,
+              oldOid: bEntry.oid,
+              newOid: null,
+              oldMode: bEntry.mode,
+              newMode: null,
+              isBinary,
+            });
+          }
+
+          if (hEntry.isTree) {
+            await walk(null, hEntry.oid, currentPath);
+          } else {
+            let isBinary = false;
+            try {
+              const blob = await client.getBlob(hEntry.oid);
+              isBinary = blob.isBinary;
+            } catch {
+              isBinary = false;
+            }
+            results.push({
+              status: 'added',
+              oldPath: null,
+              newPath: currentPath,
+              oldOid: null,
+              newOid: hEntry.oid,
+              oldMode: null,
+              newMode: hEntry.mode,
+              isBinary,
+            });
+          }
+        }
+      }
+    }
+  };
+
+  await walk(baseTreeOid, headTreeOid, '');
+  return results;
+}
+
+/**
+ * Computes full unified and split diffs for all changed files between two commits.
+ */
+export async function computeTreeFullDiff(
+  client: GitRepositoryClient,
+  baseCommitSha: string | null,
+  headCommitSha: string | null,
+  options?: { readonly contextLines?: number | undefined }
+): Promise<readonly FileDiff[]> {
+  const summaries = await computeTreeDiff(client, baseCommitSha, headCommitSha);
+  if (summaries.length === 0) {
+    return [];
+  }
+
+  const batchItems: DiffBatchItemInput[] = [];
+  const fileDiffs: FileDiff[] = [];
+
+  for (const sum of summaries) {
+    if (sum.isBinary) {
+      fileDiffs.push({
+        status: sum.status,
+        oldPath: sum.oldPath,
+        newPath: sum.newPath,
+        oldOid: sum.oldOid,
+        newOid: sum.newOid,
+        oldMode: sum.oldMode,
+        newMode: sum.newMode,
+        ...(sum.modeChanged !== undefined ? { modeChanged: sum.modeChanged } : {}),
+        isBinary: true,
+        additions: 0,
+        deletions: 0,
+        hunks: [],
+        splitRows: [],
+      });
+      continue;
+    }
+
+    if (sum.oldOid === sum.newOid && sum.modeChanged) {
+      // Mode change only, no content diff
+      fileDiffs.push({
+        status: sum.status,
+        oldPath: sum.oldPath,
+        newPath: sum.newPath,
+        oldOid: sum.oldOid,
+        newOid: sum.newOid,
+        oldMode: sum.oldMode,
+        newMode: sum.newMode,
+        modeChanged: true,
+        isBinary: false,
+        additions: 0,
+        deletions: 0,
+        hunks: [],
+        splitRows: [],
+      });
+      continue;
+    }
+
+    let oldText: string | null = null;
+    let newText: string | null = null;
+
+    if (sum.oldOid) {
+      try {
+        const oldBlob = await client.getBlob(sum.oldOid);
+        oldText = oldBlob.text ?? null;
+      } catch {
+        oldText = null;
+      }
+    }
+
+    if (sum.newOid) {
+      try {
+        const newBlob = await client.getBlob(sum.newOid);
+        newText = newBlob.text ?? null;
+      } catch {
+        newText = null;
+      }
+    }
+
+    batchItems.push({
+      oldPath: sum.oldPath,
+      newPath: sum.newPath,
+      oldOid: sum.oldOid,
+      newOid: sum.newOid,
+      oldMode: sum.oldMode,
+      newMode: sum.newMode,
+      status: sum.status,
+      ...(sum.modeChanged !== undefined ? { modeChanged: sum.modeChanged } : {}),
+      isBinary: false,
+      oldContent: oldText,
+      newContent: newText,
+      ...(options?.contextLines !== undefined ? { contextLines: options.contextLines } : {}),
+    });
+  }
+
+  if (batchItems.length > 0) {
+    const computedDiffs = await diffClient.computeBatchDiff(batchItems, options);
+    fileDiffs.push(...computedDiffs);
+  }
+
+  fileDiffs.sort((a, b) => {
+    const pathA = a.newPath ?? a.oldPath ?? '';
+    const pathB = b.newPath ?? b.oldPath ?? '';
+    return pathA.localeCompare(pathB);
+  });
+
+  return fileDiffs;
+}
+
+/**
+ * Attaches review notes to their corresponding file diffs, hunks, lines, and split rows.
+ */
+export function attachReviewNotes(
+  fileDiffs: readonly FileDiff[],
+  notes: readonly ReviewNote[]
+): readonly FileDiff[] {
+  if (notes.length === 0 || fileDiffs.length === 0) {
+    return fileDiffs;
+  }
+
+  return fileDiffs.map((fileDiff) => {
+    const filePath = fileDiff.newPath ?? fileDiff.oldPath;
+    if (!filePath) {
+      return fileDiff;
+    }
+
+    const fileNotes = notes.filter((n) => !n.filePath || n.filePath === filePath);
+    if (fileNotes.length === 0) {
+      return fileDiff;
+    }
+
+    // Attach notes to hunks and lines
+    const updatedHunks = fileDiff.hunks.map((hunk) => {
+      const updatedLines = hunk.lines.map((line) => {
+        const matchingNotes = fileNotes.filter((note) => {
+          if (note.line === undefined) return false;
+          if (line.type === 'add' || line.type === 'context') {
+            return note.line === line.newLineNumber;
+          }
+          return note.line === line.oldLineNumber;
+        });
+
+        if (matchingNotes.length === 0) {
+          return line;
+        }
+
+        return {
+          ...line,
+          reviewNotes: matchingNotes,
+        };
+      });
+
+      return {
+        ...hunk,
+        lines: updatedLines,
+      };
+    });
+
+    // Attach notes to splitRows
+    const updatedSplitRows = fileDiff.splitRows.map((row) => {
+      let leftSide = row.left;
+      let rightSide = row.right;
+
+      if (leftSide.lineNumber !== null) {
+        const leftNotes = fileNotes.filter(
+          (note) =>
+            note.line === leftSide.lineNumber &&
+            (leftSide.type === 'delete' || leftSide.type === 'context')
+        );
+        if (leftNotes.length > 0) {
+          leftSide = { ...leftSide, reviewNotes: leftNotes };
+        }
+      }
+
+      if (rightSide.lineNumber !== null) {
+        const rightNotes = fileNotes.filter(
+          (note) =>
+            note.line === rightSide.lineNumber &&
+            (rightSide.type === 'add' || rightSide.type === 'context')
+        );
+        if (rightNotes.length > 0) {
+          rightSide = { ...rightSide, reviewNotes: rightNotes };
+        }
+      }
+
+      return {
+        left: leftSide,
+        right: rightSide,
+      };
+    });
+
+    return {
+      ...fileDiff,
+      hunks: updatedHunks,
+      splitRows: updatedSplitRows,
+      reviewNotes: fileNotes,
+    };
+  });
 }

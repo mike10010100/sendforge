@@ -53,3 +53,69 @@ Implement a lightweight local static HTTP server in Rust (supporting CORS and du
 - [ ] Client application successfully fetches loose Git objects over HTTP and resolves commits, trees, and file blobs without server-side compute.
 - [ ] Interactive branch/tag switching and file tree navigation work smoothly without full page reloads.
 - [ ] Diff viewer accurately computes and renders commit diffs client-side in a Web Worker.
+
+## Follow-up — 2026-08-20T04:37:31Z
+
+Sendforge Phase 3 extends the high-performance static Git forge in `/Users/mike10010100/git/hybrid-gitforge`, adding a database-free collaboration layer with Git-native Pull Requests, Issue tracking, in-browser merge-base calculation, and review comment threads.
+
+Working directory: /Users/mike10010100/git/hybrid-gitforge
+Integrity mode: development
+
+References:
+- Rust Best Practices Guide: https://github.com/mike10010100/rust-test/blob/main/BEST_PRACTICES.md
+- Sendforge PRD: PRD.md §6.3
+- Sendforge Project Guide: PROJECT.md
+
+## Requirements
+
+### R1. Rust Core PR & Issue Ref Discovery, Exporter & Static HTML Fallback
+Build a high-performance scanner and static generator in Rust that:
+- Discovers Git references for pull requests (`refs/pull/<id>/head`, `refs/pull/<id>/meta`) and issues (`refs/issues/<id>`).
+- Serializes `static/pulls.json` and `static/issues.json` and updates `meta.json` with issue and PR counts.
+- Pre-renders static zero-JS HTML fallbacks (`static/pulls.html`, `static/issues.html`, and detailed fallback views) for full accessibility when JavaScript is disabled.
+- Enforces strict Rust safety: `#![forbid(unsafe_code)]`, zero `.unwrap()`/`.expect()`/`panic!`, strict Clippy deny list, clock-warp safe timestamps, and typed `Result<T, E>`.
+
+### R2. In-Browser Client Merge-Base & 3-Way Diff Engine
+Implement a client-side Git DAG traversal engine in TypeScript:
+- Traverses parent commit graphs starting from the PR head commit and target branch tip to find the lowest common ancestor (merge base).
+- Calculates the 3-way commit diff between the merge base tree and the PR head tree off-thread in a Web Worker without dynamic server compute.
+- Attaches review notes (`refs/notes/reviews`) to specific files, diff hunks, or commit SHAs.
+
+### R3. Interactive Pull Request Viewer (`PullRequestsView.tsx`, `PRDetailView.tsx`)
+Create a responsive, client-side Pull Request interface featuring:
+- PR List View: Filter by status (`open`, `merged`, `closed`), author, and labels with instant client-side search.
+- PR Detail View:
+  - **Conversation Tab**: Description, author, timestamps, status badge, and chronological comment & commit timeline.
+  - **Commits Tab**: List of commits included in the PR branch.
+  - **Files Changed Tab**: Interactive Unified and Split diff view showing line additions/deletions between merge base and PR head.
+
+### R4. Interactive Issue Tracker (`IssuesView.tsx`, `IssueDetailView.tsx`)
+Create a responsive, client-side Issue Tracker interface featuring:
+- Issue List View: Filter by status (`open`, `closed`), author, and label badges with instant search.
+- Issue Detail View: Header, status badge, author metadata, Markdown-rendered issue body, and chronological discussion comments.
+
+### R5. Integrated Navigation & Hash Routing
+- Update top navigation bar to: `[ 📁 Code ]` `[ 📜 Commits <count> ]` `[ 🎯 Issues <count> ]` `[ 🔀 Pull Requests <count> ]`.
+- Support hash deep linking: `#/issues`, `#/issues/<id>`, `#/pulls`, `#/pulls/<id>`, `#/pulls/<id>/files`, `#/pulls/<id>/commits`.
+
+### R6. Safety, Code Quality & Multi-Tier Verification
+- Maintain zero-`any` TypeScript under `@typescript-eslint/strict-type-checked` and `strict: true`.
+- Unit test suite (Vitest) covering merge-base resolution, PR diff computation, issue parsing, and UI components.
+- Multi-tier E2E test suite covering the full lifecycle of creating, serving, and browsing PRs and issues.
+
+## Acceptance Criteria
+
+### Compiler Gates & Linter Gates
+- [ ] `cargo clippy --all-targets --all-features -- -D warnings` passes with 0 warnings/errors.
+- [ ] `cargo test --all-targets --all-features` passes all unit and integration tests.
+- [ ] `cargo fmt --all --check` passes with 0 formatting discrepancies.
+- [ ] `npm run typecheck` (`tsc --noEmit`) passes with 0 errors.
+- [ ] `npm run lint` (`eslint .`) passes with 0 warnings/errors under strict TypeScript lint rules.
+- [ ] `npm test` passes all Vitest test suites.
+
+### Feature Verification
+- [ ] `sendforge export` discovers `refs/pull/*` and `refs/issues/*` and generates `pulls.json`, `issues.json`, and pre-rendered HTML fallbacks.
+- [ ] Top navbar displays `📁 Code`, `📜 Commits`, `🎯 Issues`, and `🔀 Pull Requests` with active state and count badges.
+- [ ] Pull Requests view computes merge base client-side and accurately renders the "Files Changed" diff.
+- [ ] Issues view accurately renders markdown issue descriptions and comment threads.
+- [ ] Full E2E test suite passes 100% across all feature, boundary, combination, and workload tiers.

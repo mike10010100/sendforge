@@ -261,4 +261,201 @@ export class GitRepoHelper {
       fs.writeFileSync(objPath, buf.subarray(0, Math.max(1, Math.floor(buf.length / 2))));
     }
   }
+
+  /**
+   * Create a native Git Pull Request reference set:
+   * - refs/pull/<id>/head -> commit SHA of head
+   * - refs/pull/<id>/meta -> blob object containing JSON metadata
+   */
+  createPullRequest(repoPath, prData) {
+    const id = String(prData.id || prData.number || '1');
+    const number = Number(prData.number || id);
+    const headCommit = prData.head_commit || prData.headCommit;
+
+    if (!headCommit) {
+      throw new Error('createPullRequest requires head_commit / headCommit SHA');
+    }
+
+    const normalizedData = {
+      id,
+      number,
+      title: prData.title || `PR #${id}`,
+      description: prData.description || '',
+      author: prData.author || { name: 'Sendforge Tester', email: 'tester@sendforge.dev' },
+      target_branch: prData.target_branch || prData.targetBranch || 'main',
+      source_branch: prData.source_branch || prData.sourceBranch || `feature/pr-${id}`,
+      head_commit: headCommit,
+      status: prData.status || 'open',
+      created_at: prData.created_at || prData.createdAt || Math.floor(Date.now() / 1000),
+      updated_at: prData.updated_at || prData.updatedAt || Math.floor(Date.now() / 1000),
+      labels: prData.labels || [],
+      comments: prData.comments || []
+    };
+
+    // Write metadata blob object into loose objects
+    const jsonBuf = Buffer.from(JSON.stringify(normalizedData, null, 2), 'utf-8');
+    const metaOid = this.writeLooseObject(repoPath, 'blob', jsonBuf);
+
+    // Update refs in repository
+    this.git(repoPath, ['update-ref', `refs/pull/${id}/head`, headCommit]);
+    this.git(repoPath, ['update-ref', `refs/pull/${id}/meta`, metaOid]);
+
+    return {
+      id,
+      number,
+      headSha: headCommit,
+      metaOid,
+      refHead: `refs/pull/${id}/head`,
+      refMeta: `refs/pull/${id}/meta`,
+      data: normalizedData
+    };
+  }
+
+  /**
+   * Create a native Git Issue reference:
+   * - refs/issues/<id> -> blob object containing JSON metadata
+   */
+  createIssue(repoPath, issueData) {
+    const id = String(issueData.id || issueData.number || '1');
+    const number = Number(issueData.number || id);
+
+    const normalizedData = {
+      id,
+      number,
+      title: issueData.title || `Issue #${id}`,
+      description: issueData.description || '',
+      author: issueData.author || { name: 'Sendforge Tester', email: 'tester@sendforge.dev' },
+      status: issueData.status || 'open',
+      created_at: issueData.created_at || issueData.createdAt || Math.floor(Date.now() / 1000),
+      updated_at: issueData.updated_at || issueData.updatedAt || Math.floor(Date.now() / 1000),
+      labels: issueData.labels || [],
+      comments: issueData.comments || []
+    };
+
+    const jsonBuf = Buffer.from(JSON.stringify(normalizedData, null, 2), 'utf-8');
+    const metaOid = this.writeLooseObject(repoPath, 'blob', jsonBuf);
+
+    this.git(repoPath, ['update-ref', `refs/issues/${id}`, metaOid]);
+
+    return {
+      id,
+      number,
+      metaOid,
+      refName: `refs/issues/${id}`,
+      data: normalizedData
+    };
+  }
+
+  /**
+   * Attach a review note to a commit under refs/notes/reviews
+   */
+  attachReviewNote(repoPath, commitSha, noteData) {
+    const jsonStr = typeof noteData === 'string' ? noteData : JSON.stringify(noteData);
+    try {
+      this.git(repoPath, ['notes', '--ref=reviews', 'add', '-f', '-m', jsonStr, commitSha]);
+    } catch (e) {
+      // In case git notes requires an existing tree, create loose blob and ref
+      const noteBlob = this.writeLooseObject(repoPath, 'blob', Buffer.from(jsonStr, 'utf-8'));
+      this.git(repoPath, ['update-ref', 'refs/notes/reviews', noteBlob]);
+    }
+  }
+
+  /**
+   * Create synthetic DAG topologies for merge-base testing
+   */
+  createMergeBaseTopology(workPath, topologyType, options = {}) {
+    const defaultBranch = options.defaultBranch || 'main';
+
+    if (topologyType === 'simple_fork') {
+      const baseSha = this.commitFiles(workPath, { 'base.txt': 'base content' }, 'Base commit');
+      this.createBranch(workPath, 'feature', true);
+      this.commitFiles(workPath, { 'feature.txt': 'feature 1' }, 'Feature commit 1');
+      const f2Sha = this.commitFiles(workPath, { 'feature.txt': 'feature 1\nfeature 2' }, 'Feature commit 2');
+      this.git(workPath, ['checkout', defaultBranch]);
+      const mainTip = this.commitFiles(workPath, { 'main.txt': 'main advance' }, 'Main advance commit');
+      return { baseSha, mainTip, featureTip: f2Sha, lca: baseSha };
+    }
+
+    if (topologyType === 'divergent') {
+      const baseSha = this.commitFiles(workPath, { 'common.txt': 'common line 1\ncommon line 2' }, 'Base commit');
+      this.createBranch(workPath, 'feature', true);
+      this.commitFiles(workPath, { 'feature.txt': 'feat A' }, 'Feat A');
+      this.commitFiles(workPath, { 'feature.txt': 'feat A\nfeat B' }, 'Feat B');
+      const featureTip = this.commitFiles(workPath, { 'feature.txt': 'feat A\nfeat B\nfeat C' }, 'Feat C');
+
+      this.git(workPath, ['checkout', defaultBranch]);
+      this.commitFiles(workPath, { 'main.txt': 'main 1' }, 'Main 1');
+      const mainTip = this.commitFiles(workPath, { 'main.txt': 'main 1\nmain 2' }, 'Main 2');
+      return { baseSha, mainTip, featureTip, lca: baseSha };
+    }
+
+    if (topologyType === 'fast_forward') {
+      const baseSha = this.commitFiles(workPath, { 'ff.txt': 'init' }, 'Initial commit');
+      this.createBranch(workPath, 'feature', true);
+      this.commitFiles(workPath, { 'ff.txt': 'init\nstep 1' }, 'Step 1');
+      const featureTip = this.commitFiles(workPath, { 'ff.txt': 'init\nstep 1\nstep 2' }, 'Step 2');
+      this.git(workPath, ['checkout', defaultBranch]);
+      return { baseSha, mainTip: baseSha, featureTip, lca: baseSha };
+    }
+
+    if (topologyType === 'criss_cross') {
+      const rootSha = this.commitFiles(workPath, { 'root.txt': 'root' }, 'Root commit');
+      this.createBranch(workPath, 'branch-a', true);
+      const a1Sha = this.commitFiles(workPath, { 'file_a.txt': 'a1' }, 'Commit A1');
+
+      this.git(workPath, ['checkout', defaultBranch]);
+      this.createBranch(workPath, 'branch-b', true);
+      const b1Sha = this.commitFiles(workPath, { 'file_b.txt': 'b1' }, 'Commit B1');
+
+      // Merge B into A
+      this.git(workPath, ['checkout', 'branch-a']);
+      this.git(workPath, ['merge', 'branch-b', '-m', 'Merge B into A (A2)']);
+      const a2Sha = this.git(workPath, ['rev-parse', 'HEAD']);
+
+      // Merge A into B
+      this.git(workPath, ['checkout', 'branch-b']);
+      this.git(workPath, ['merge', 'branch-a', '-m', 'Merge A into B (B2)']);
+      const b2Sha = this.git(workPath, ['rev-parse', 'HEAD']);
+
+      // Further commits on A and B
+      this.git(workPath, ['checkout', 'branch-a']);
+      const a3Sha = this.commitFiles(workPath, { 'file_a.txt': 'a1\na3' }, 'Commit A3');
+
+      this.git(workPath, ['checkout', 'branch-b']);
+      const b3Sha = this.commitFiles(workPath, { 'file_b.txt': 'b1\nb3' }, 'Commit B3');
+
+      return { rootSha, a1Sha, b1Sha, a2Sha, b2Sha, branchASha: a3Sha, branchBSha: b3Sha, candidates: [a2Sha, b2Sha] };
+    }
+
+    if (topologyType === 'orphan') {
+      const rootSha = this.commitFiles(workPath, { 'main.txt': 'main only' }, 'Main root commit');
+      this.git(workPath, ['checkout', '--orphan', 'orphan-branch']);
+      this.git(workPath, ['rm', '-rf', '.']);
+      const orphanTip = this.commitFiles(workPath, { 'orphan.txt': 'orphan only' }, 'Orphan root commit');
+      this.git(workPath, ['checkout', defaultBranch]);
+      return { mainTip: rootSha, featureTip: orphanTip, lca: null };
+    }
+
+    if (topologyType === 'linear_chain') {
+      const count = options.count || 20;
+      let lastSha = null;
+      let forkSha = null;
+      const forkAt = options.forkAt || Math.floor(count / 2);
+
+      for (let i = 1; i <= count; i++) {
+        lastSha = this.commitFiles(workPath, { 'chain.txt': `Line ${i}` }, `Chain commit ${i}`);
+        if (i === forkAt) {
+          forkSha = lastSha;
+        }
+      }
+
+      this.git(workPath, ['checkout', '-b', 'feature-chain', forkSha]);
+      const featureTip = this.commitFiles(workPath, { 'feature_chain.txt': 'feature work' }, 'Feature on chain');
+      this.git(workPath, ['checkout', defaultBranch]);
+
+      return { baseSha: forkSha, mainTip: lastSha, featureTip, lca: forkSha, totalCommits: count };
+    }
+
+    throw new Error(`Unknown topology type: ${topologyType}`);
+  }
 }

@@ -15,6 +15,7 @@
     clippy::unimplemented
 )]
 
+pub mod collab;
 pub mod error;
 pub mod export;
 pub mod hook;

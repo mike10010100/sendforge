@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'preact/hooks';
 import type { FunctionalComponent } from 'preact';
 import { GitRepositoryClient, type TreeFileItem } from '../engine/fetcher.js';
+import { CollabClient, type Issue, type PullRequest } from '../engine/collab-client.js';
 import type {
   GitBlobObject,
   GitCommitObject,
   GitTreeObject,
   RepoMeta,
+  RepoStats,
 } from '../engine/types.js';
 import { diffClient } from '../worker/diff-client.js';
 import type { FileDiff } from '../worker/diff-types.js';
@@ -15,6 +17,11 @@ import { DiffView } from './DiffView.js';
 import { FileFinder } from './FileFinder.js';
 import { RefSelector } from './RefSelector.js';
 import { TreeView } from './TreeView.js';
+import { IssuesView } from './IssuesView.js';
+import { IssueDetailView } from './IssueDetailView.js';
+import { PullRequestsView } from './PullRequestsView.js';
+import { PRDetailView } from './PRDetailView.js';
+import { parseRoute, type Route } from './router.js';
 
 export interface AppProps {
   readonly baseUrl?: string;
@@ -22,10 +29,19 @@ export interface AppProps {
 
 export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
   const [client] = useState(() => new GitRepositoryClient(baseUrl));
+  const [collabClient] = useState(() => new CollabClient(baseUrl));
   const [meta, setMeta] = useState<RepoMeta | null>(null);
+
   const [currentRef, setCurrentRef] = useState<string>('main');
-  const [activeTab, setActiveTab] = useState<'code' | 'commits'>('code');
+  const [activeTab, setActiveTab] = useState<'code' | 'commits' | 'issues' | 'pulls'>('code');
   const [selectedCommitDiff, setSelectedCommitDiff] = useState<string | null>(null);
+
+  // Collaboration state
+  const [pulls, setPulls] = useState<readonly PullRequest[]>([]);
+  const [issues, setIssues] = useState<readonly Issue[]>([]);
+  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
+  const [selectedPullId, setSelectedPullId] = useState<string | null>(null);
+  const [pullDetailTab, setPullDetailTab] = useState<'conversation' | 'commits' | 'files'>('conversation');
 
   const [currentCommit, setCurrentCommit] = useState<GitCommitObject | null>(null);
   const [currentTree, setCurrentTree] = useState<GitTreeObject | null>(null);
@@ -44,15 +60,22 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load initial repository metadata
+  // Load initial repository metadata & collaboration catalogs
   useEffect(() => {
     let isMounted = true;
     const initMeta = async () => {
       try {
         setLoading(true);
-        const repoMeta = await client.getMeta();
+        const [repoMeta, loadedPulls, loadedIssues] = await Promise.all([
+          client.getMeta(),
+          collabClient.getPullRequests().catch(() => []),
+          collabClient.getIssues().catch(() => []),
+        ]);
+
         if (!isMounted) return;
         setMeta(repoMeta);
+        setPulls(loadedPulls);
+        setIssues(loadedIssues);
         setCurrentRef(repoMeta.default_branch || 'main');
       } catch (err) {
         if (!isMounted) return;
@@ -67,7 +90,7 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
     return () => {
       isMounted = false;
     };
-  }, [client]);
+  }, [client, collabClient]);
 
   // Load ref state when currentRef changes
   const loadRefState = useCallback(
@@ -141,12 +164,6 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
     },
     [client]
   );
-
-  useEffect(() => {
-    if (meta && currentRef) {
-      void loadRefState(currentRef, currentPath);
-    }
-  }, [meta, currentRef, loadRefState, currentPath]);
 
   // Handle commit diff computation
   const loadCommitDiff = useCallback(
@@ -236,6 +253,108 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
     [client]
   );
 
+  // Hash Route Synchronizer
+  const handleRouteChange = useCallback(
+    (hash: string) => {
+      const route: Route = parseRoute(hash);
+
+      switch (route.type) {
+        case 'code':
+          setActiveTab('code');
+          setSelectedIssueId(null);
+          setSelectedPullId(null);
+          setSelectedCommitDiff(null);
+          if (route.ref && route.ref !== currentRef) {
+            setCurrentRef(route.ref);
+          }
+          if (route.path !== undefined && route.path !== currentPath) {
+            setCurrentPath(route.path);
+            if (meta && (route.ref ?? currentRef)) {
+              void loadRefState(route.ref ?? currentRef, route.path);
+            }
+          } else if (route.path === undefined && currentPath !== '') {
+            setCurrentPath('');
+            if (meta && (route.ref ?? currentRef)) {
+              void loadRefState(route.ref ?? currentRef, '');
+            }
+          }
+          break;
+
+        case 'commits':
+          setActiveTab('commits');
+          setSelectedIssueId(null);
+          setSelectedPullId(null);
+          setSelectedCommitDiff(null);
+          if (route.ref && route.ref !== currentRef) {
+            setCurrentRef(route.ref);
+          }
+          break;
+
+        case 'commit':
+          setActiveTab('commits');
+          setSelectedIssueId(null);
+          setSelectedPullId(null);
+          if (selectedCommitDiff !== route.sha) {
+            void loadCommitDiff(route.sha);
+          }
+          break;
+
+        case 'issues':
+          setActiveTab('issues');
+          setSelectedIssueId(null);
+          setSelectedPullId(null);
+          setSelectedCommitDiff(null);
+          break;
+
+        case 'issue':
+          setActiveTab('issues');
+          setSelectedIssueId(route.id);
+          setSelectedPullId(null);
+          setSelectedCommitDiff(null);
+          break;
+
+        case 'pulls':
+          setActiveTab('pulls');
+          setSelectedPullId(null);
+          setSelectedIssueId(null);
+          setSelectedCommitDiff(null);
+          break;
+
+        case 'pull':
+          setActiveTab('pulls');
+          setSelectedPullId(route.id);
+          setPullDetailTab(route.tab ?? 'conversation');
+          setSelectedIssueId(null);
+          setSelectedCommitDiff(null);
+          break;
+      }
+    },
+    [currentPath, currentRef, meta, selectedCommitDiff, loadCommitDiff, loadRefState]
+  );
+
+  // Listen to window hashchange
+  useEffect(() => {
+    const onHashChange = () => {
+      handleRouteChange(window.location.hash);
+    };
+
+    window.addEventListener('hashchange', onHashChange);
+    // Initial route handling
+    if (window.location.hash) {
+      handleRouteChange(window.location.hash);
+    }
+
+    return () => {
+      window.removeEventListener('hashchange', onHashChange);
+    };
+  }, [handleRouteChange]);
+
+  useEffect(() => {
+    if (meta && currentRef && activeTab === 'code' && !currentCommit) {
+      void loadRefState(currentRef, currentPath);
+    }
+  }, [meta, currentRef, activeTab, currentCommit, loadRefState, currentPath]);
+
   // Global hotkey handler (Ctrl+K / Cmd+K / T)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -316,14 +435,16 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
 
   const handleNavigatePath = (newPath: string, isTree: boolean) => {
     setActiveTab('code');
-    if (isTree) {
-      setCurrentPath(newPath);
-      setCurrentBlob(null);
-      void loadRefState(currentRef, newPath);
-    } else {
-      setCurrentPath(newPath);
-      void loadRefState(currentRef, newPath);
-    }
+    setSelectedIssueId(null);
+    setSelectedPullId(null);
+    setSelectedCommitDiff(null);
+
+    const hash = isTree
+      ? newPath
+        ? `#/tree/${newPath}`
+        : '#/'
+      : `#/blob/${newPath}`;
+    window.location.hash = hash;
   };
 
   const handleSelectFileFromFinder = (path: string) => {
@@ -331,6 +452,27 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
   };
 
   const pathSegments = currentPath ? currentPath.split('/') : [];
+
+  // Active Issue and PR objects
+  const activeIssue = selectedIssueId
+    ? issues.find((i) => i.id === selectedIssueId || String(i.number) === selectedIssueId) ?? null
+    : null;
+
+  const activePull = selectedPullId
+    ? pulls.find((p) => p.id === selectedPullId || String(p.number) === selectedPullId) ?? null
+    : null;
+
+  // Counts for top navbar badges
+  const extendedStats = meta?.stats as (RepoStats & {
+    readonly open_issue_count?: number | undefined;
+    readonly open_pull_count?: number | undefined;
+  }) | undefined;
+
+  const openIssuesCount =
+    extendedStats?.open_issue_count ?? issues.filter((i) => i.status === 'open').length;
+  const openPullsCount =
+    extendedStats?.open_pull_count ?? pulls.filter((p) => p.status === 'open').length;
+  const commitsCount = meta?.stats.commit_count ?? commitHistory.length;
 
   return (
     <div className="app-container">
@@ -342,10 +484,7 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
               href="#/"
               onClick={(e) => {
                 e.preventDefault();
-                setCurrentPath('');
-                setActiveTab('code');
-                setSelectedCommitDiff(null);
-                void loadRefState(currentRef, '');
+                window.location.hash = '#/';
               }}
             >
               {meta?.name ?? 'Sendforge'}
@@ -371,31 +510,59 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
           </div>
         </div>
 
-        <nav className="nav-tabs">
+        {/* 4-Tab Top Navigation Bar */}
+        <nav className="nav-tabs" aria-label="Main repository navigation">
           <button
             type="button"
             className={`nav-tab ${activeTab === 'code' ? 'active' : ''}`}
             onClick={() => {
-              setActiveTab('code');
-              setSelectedCommitDiff(null);
+              window.location.hash = '#/';
             }}
+            data-testid="nav-tab-code"
           >
             📁 Code
           </button>
+
           <button
             type="button"
             className={`nav-tab ${activeTab === 'commits' ? 'active' : ''}`}
             onClick={() => {
-              setActiveTab('commits');
-              setSelectedCommitDiff(null);
+              window.location.hash = '#/commits';
             }}
+            data-testid="nav-tab-commits"
           >
             📜 Commits{' '}
-            {meta && (
-              <span className="badge">
-                {commitHistory.length > 0 ? commitHistory.length : meta.stats.commit_count}
-              </span>
-            )}
+            <span className="badge" data-testid="commits-count-badge">
+              {commitsCount}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            className={`nav-tab ${activeTab === 'issues' ? 'active' : ''}`}
+            onClick={() => {
+              window.location.hash = '#/issues';
+            }}
+            data-testid="nav-tab-issues"
+          >
+            🎯 Issues{' '}
+            <span className="badge" data-testid="issues-count-badge">
+              {openIssuesCount}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            className={`nav-tab ${activeTab === 'pulls' ? 'active' : ''}`}
+            onClick={() => {
+              window.location.hash = '#/pulls';
+            }}
+            data-testid="nav-tab-pulls"
+          >
+            🔀 Pull Requests{' '}
+            <span className="badge" data-testid="pulls-count-badge">
+              {openPullsCount}
+            </span>
           </button>
         </nav>
       </header>
@@ -415,124 +582,128 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
           </div>
         )}
 
-        <div className="controls-bar">
-          <div className="ref-selector-container">
-            <RefSelector
-              currentRef={currentRef}
-              branches={meta?.branches ?? []}
-              tags={meta?.tags ?? []}
-              defaultBranch={meta?.default_branch ?? 'main'}
-              onSelectRef={(targetRef) => {
-                if (targetRef === currentRef) return;
-                setCurrentRef(targetRef);
-                setCurrentPath('');
-                void loadRefState(targetRef, '');
-              }}
-            />
-
-            <div className="download-dropdown-container">
-              <button
-                type="button"
-                className={`btn download-btn ${isDownloadOpen ? 'active' : ''}`}
-                onClick={() => {
-                  setIsDownloadOpen((prev) => !prev);
+        {/* Sub-controls Bar visible in Code View */}
+        {activeTab === 'code' && (
+          <div className="controls-bar">
+            <div className="ref-selector-container">
+              <RefSelector
+                currentRef={currentRef}
+                branches={meta?.branches ?? []}
+                tags={meta?.tags ?? []}
+                defaultBranch={meta?.default_branch ?? 'main'}
+                onSelectRef={(targetRef) => {
+                  if (targetRef === currentRef) return;
+                  setCurrentRef(targetRef);
+                  setCurrentPath('');
+                  void loadRefState(targetRef, '');
                 }}
-                disabled={downloadingFormat !== null || !currentCommit}
-                title="Download repository snapshot archive"
-                data-testid="download-snapshot-btn"
-              >
-                {downloadingFormat ? (
-                  <>
-                    <span className="download-spinner" />
-                    <span>
-                      {downloadProgress && downloadProgress.total > 0
-                        ? `Archiving (${downloadProgress.completed}/${downloadProgress.total})...`
-                        : `Generating ${downloadingFormat.toUpperCase()}...`}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span>⬇️ Code / Download</span>
-                    <span className="dropdown-arrow">▾</span>
-                  </>
-                )}
-              </button>
+              />
 
-              {isDownloadOpen && (
-                <div className="download-dropdown-menu" role="menu">
-                  <div className="download-dropdown-header">Clone or download snapshot</div>
-                  <button
-                    type="button"
-                    className="download-dropdown-item"
-                    role="menuitem"
-                    onClick={() => {
-                      void handleDownloadSnapshot('zip');
-                    }}
-                    data-testid="download-zip-btn"
-                  >
-                    <span className="download-format-icon">📦</span>
-                    <div className="download-format-details">
-                      <span className="download-format-title">Download ZIP (.zip)</span>
-                      <span className="download-format-desc">Standard PKWARE zip compressed archive</span>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    className="download-dropdown-item"
-                    role="menuitem"
-                    onClick={() => {
-                      void handleDownloadSnapshot('tar.gz');
-                    }}
-                    data-testid="download-targz-btn"
-                  >
-                    <span className="download-format-icon">🗜️</span>
-                    <div className="download-format-details">
-                      <span className="download-format-title">Download TAR.GZ (.tar.gz)</span>
-                      <span className="download-format-desc">POSIX ustar gzipped tarball archive</span>
-                    </div>
-                  </button>
-                </div>
-              )}
+              <div className="download-dropdown-container">
+                <button
+                  type="button"
+                  className={`btn download-btn ${isDownloadOpen ? 'active' : ''}`}
+                  onClick={() => {
+                    setIsDownloadOpen((prev) => !prev);
+                  }}
+                  disabled={downloadingFormat !== null || !currentCommit}
+                  title="Download repository snapshot archive"
+                  data-testid="download-snapshot-btn"
+                >
+                  {downloadingFormat ? (
+                    <>
+                      <span className="download-spinner" />
+                      <span>
+                        {downloadProgress && downloadProgress.total > 0
+                          ? `Archiving (${downloadProgress.completed}/${downloadProgress.total})...`
+                          : `Generating ${downloadingFormat.toUpperCase()}...`}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span>⬇️ Code / Download</span>
+                      <span className="dropdown-arrow">▾</span>
+                    </>
+                  )}
+                </button>
+
+                {isDownloadOpen && (
+                  <div className="download-dropdown-menu" role="menu">
+                    <div className="download-dropdown-header">Clone or download snapshot</div>
+                    <button
+                      type="button"
+                      className="download-dropdown-item"
+                      role="menuitem"
+                      onClick={() => {
+                        void handleDownloadSnapshot('zip');
+                      }}
+                      data-testid="download-zip-btn"
+                    >
+                      <span className="download-format-icon">📦</span>
+                      <div className="download-format-details">
+                        <span className="download-format-title">Download ZIP (.zip)</span>
+                        <span className="download-format-desc">Standard PKWARE zip compressed archive</span>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      className="download-dropdown-item"
+                      role="menuitem"
+                      onClick={() => {
+                        void handleDownloadSnapshot('tar.gz');
+                      }}
+                      data-testid="download-targz-btn"
+                    >
+                      <span className="download-format-icon">🗜️</span>
+                      <div className="download-format-details">
+                        <span className="download-format-title">Download TAR.GZ (.tar.gz)</span>
+                        <span className="download-format-desc">POSIX ustar gzipped tarball archive</span>
+                      </div>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="breadcrumbs">
+              <a
+                href="#/"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setCurrentPath('');
+                  setCurrentBlob(null);
+                  void loadRefState(currentRef, '');
+                }}
+              >
+                {meta?.name ?? 'repo'}
+              </a>
+              {pathSegments.map((segment, idx) => {
+                const subPath = pathSegments.slice(0, idx + 1).join('/');
+                const isLast = idx === pathSegments.length - 1;
+                return (
+                  <span key={subPath} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    <span className="breadcrumb-separator">/</span>
+                    {isLast ? (
+                      <span style={{ color: 'var(--text-primary)' }}>{segment}</span>
+                    ) : (
+                      <a
+                        href={`#/tree/${subPath}`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleNavigatePath(subPath, true);
+                        }}
+                      >
+                        {segment}
+                      </a>
+                    )}
+                  </span>
+                );
+              })}
             </div>
           </div>
+        )}
 
-          <div className="breadcrumbs">
-            <a
-              href="#/"
-              onClick={(e) => {
-                e.preventDefault();
-                setCurrentPath('');
-                setCurrentBlob(null);
-                void loadRefState(currentRef, '');
-              }}
-            >
-              {meta?.name ?? 'repo'}
-            </a>
-            {pathSegments.map((segment, idx) => {
-              const subPath = pathSegments.slice(0, idx + 1).join('/');
-              const isLast = idx === pathSegments.length - 1;
-              return (
-                <span key={subPath} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                  <span className="breadcrumb-separator">/</span>
-                  {isLast ? (
-                    <span style={{ color: 'var(--text-primary)' }}>{segment}</span>
-                  ) : (
-                    <a
-                      href={`#/tree/${subPath}`}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        handleNavigatePath(subPath, true);
-                      }}
-                    >
-                      {segment}
-                    </a>
-                  )}
-                </span>
-              );
-            })}
-          </div>
-        </div>
-
+        {/* View Switching */}
         {loading ? (
           <div className="box" style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
             Loading repository data...
@@ -560,22 +731,67 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
               readmeBlob={readmeBlob}
             />
           ) : null
-        ) : selectedCommitDiff ? (
-          <DiffView
-            fileDiffs={fileDiffs}
-            commit={currentCommit}
-            onSelectCommit={(sha) => {
-              void loadCommitDiff(sha);
+        ) : activeTab === 'commits' ? (
+          selectedCommitDiff ? (
+            <DiffView
+              fileDiffs={fileDiffs}
+              commit={currentCommit}
+              onSelectCommit={(sha) => {
+                void loadCommitDiff(sha);
+              }}
+              onBack={() => {
+                setSelectedCommitDiff(null);
+                window.location.hash = '#/commits';
+              }}
+            />
+          ) : (
+            <CommitLog
+              commits={commitHistory}
+              onSelectCommit={(sha) => {
+                window.location.hash = `#/commit/${sha}`;
+              }}
+            />
+          )
+        ) : activeTab === 'issues' ? (
+          selectedIssueId && activeIssue ? (
+            <IssueDetailView
+              issue={activeIssue}
+              onBack={() => {
+                window.location.hash = '#/issues';
+              }}
+            />
+          ) : (
+            <IssuesView
+              issues={issues}
+              onSelectIssue={(id) => {
+                window.location.hash = `#/issues/${id}`;
+              }}
+            />
+          )
+        ) : selectedPullId && activePull ? (
+          <PRDetailView
+            pr={activePull}
+            client={client}
+            activeTab={pullDetailTab}
+            onTabChange={(tab) => {
+              setPullDetailTab(tab);
+              window.location.hash =
+                tab === 'conversation'
+                  ? `#/pulls/${activePull.id}`
+                  : `#/pulls/${activePull.id}/${tab}`;
             }}
             onBack={() => {
-              setSelectedCommitDiff(null);
+              window.location.hash = '#/pulls';
+            }}
+            onSelectCommit={(sha) => {
+              window.location.hash = `#/commit/${sha}`;
             }}
           />
         ) : (
-          <CommitLog
-            commits={commitHistory}
-            onSelectCommit={(sha) => {
-              void loadCommitDiff(sha);
+          <PullRequestsView
+            pulls={pulls}
+            onSelectPull={(id) => {
+              window.location.hash = `#/pulls/${id}`;
             }}
           />
         )}

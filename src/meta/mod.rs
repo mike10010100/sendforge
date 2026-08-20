@@ -73,6 +73,18 @@ pub struct RepoStats {
     pub commit_count: usize,
     /// Number of files in the default branch root tree.
     pub file_count: usize,
+    /// Total number of pull requests.
+    #[serde(default)]
+    pub pull_count: usize,
+    /// Number of open pull requests.
+    #[serde(default)]
+    pub open_pull_count: usize,
+    /// Total number of issues.
+    #[serde(default)]
+    pub issue_count: usize,
+    /// Number of open issues.
+    #[serde(default)]
+    pub open_issue_count: usize,
 }
 
 /// Full Sendforge repository metadata structure (`meta.json`).
@@ -323,11 +335,30 @@ pub fn generate_repo_metadata(
         sha,
     });
 
+    let pulls = crate::collab::pulls::scan_pull_requests(repo_path, &all_refs, &default_branch)
+        .unwrap_or_default();
+    let issues = crate::collab::issues::scan_issues(repo_path, &all_refs).unwrap_or_default();
+
+    let pull_count = pulls.len();
+    let open_pull_count = pulls
+        .iter()
+        .filter(|p| p.status == crate::collab::models::PullRequestStatus::Open)
+        .count();
+    let issue_count = issues.len();
+    let open_issue_count = issues
+        .iter()
+        .filter(|i| i.status == crate::collab::models::IssueStatus::Open)
+        .count();
+
     let stats = RepoStats {
         branch_count: branches.len(),
         tag_count: tags.len(),
         commit_count: details.commit_count,
         file_count: details.file_count,
+        pull_count,
+        open_pull_count,
+        issue_count,
+        open_issue_count,
     };
 
     let updated_at = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);

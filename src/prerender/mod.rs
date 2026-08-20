@@ -3,8 +3,18 @@
 use pulldown_cmark::{html, CowStr, Event, Options, Parser, Tag};
 use std::fmt::Write as _;
 
+use crate::collab::models::{Comment, Issue, IssueStatus, PullRequest, PullRequestStatus};
 use crate::meta::SendforgeRepoMeta;
 use crate::repo::objects::{CommitObject, TreeEntry};
+
+/// Active navigation tab indicator for pre-rendered pages.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NavTab {
+    Code,
+    Commits,
+    Issues,
+    Pulls,
+}
 
 /// Safely escapes special HTML characters in text.
 #[must_use]
@@ -21,6 +31,15 @@ pub fn escape_html(text: &str) -> String {
         }
     }
     out
+}
+
+/// Formats a Unix epoch timestamp safely into an ISO 8601 UTC string.
+#[must_use]
+pub fn format_timestamp_iso(timestamp: i64) -> String {
+    chrono::DateTime::from_timestamp(timestamp, 0).map_or_else(
+        || "1970-01-01T00:00:00Z".to_string(),
+        |dt| dt.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+    )
 }
 
 /// Renders a `CommonMark` Markdown document into sanitized HTML.
@@ -89,6 +108,46 @@ pub fn render_markdown(markdown_text: &str) -> String {
     let mut html_output = String::new();
     html::push_html(&mut html_output, sanitized_events);
     html_output
+}
+
+/// Renders the 4-tab repository navigation bar with active state and count badges.
+#[must_use]
+pub fn render_nav_bar(active_tab: NavTab, meta: &SendforgeRepoMeta, depth: usize) -> String {
+    let prefix = if depth == 0 { "" } else { "../" };
+    let code_cls = if active_tab == NavTab::Code {
+        " class=\"active\""
+    } else {
+        ""
+    };
+    let commits_cls = if active_tab == NavTab::Commits {
+        " class=\"active\""
+    } else {
+        ""
+    };
+    let issues_cls = if active_tab == NavTab::Issues {
+        " class=\"active\""
+    } else {
+        ""
+    };
+    let pulls_cls = if active_tab == NavTab::Pulls {
+        " class=\"active\""
+    } else {
+        ""
+    };
+
+    let commit_count = meta.stats.commit_count;
+    let open_issue_count = meta.stats.open_issue_count;
+    let open_pull_count = meta.stats.open_pull_count;
+
+    format!(
+        r#"    <!-- Navigation Tabs -->
+    <nav class="repo-nav">
+      <a href="{prefix}./"{code_cls}>📁 Code</a>
+      <a href="{prefix}log.html"{commits_cls}>📜 Commits ({commit_count})</a>
+      <a href="{prefix}issues.html"{issues_cls}>🎯 Issues ({open_issue_count})</a>
+      <a href="{prefix}pulls.html"{pulls_cls}>🔀 Pull Requests ({open_pull_count})</a>
+    </nav>"#
+    )
 }
 
 fn build_latest_commit_section(meta: &SendforgeRepoMeta) -> String {
@@ -195,6 +254,7 @@ pub fn render_index_html(
     let latest_commit_html = build_latest_commit_section(meta);
     let tree_table_body = build_tree_table_rows(tree_entries);
     let readme_section = build_readme_section(meta, rendered_readme_html);
+    let nav_html = render_nav_bar(NavTab::Code, meta, 0);
 
     format!(
         r#"<!DOCTYPE html>
@@ -219,12 +279,7 @@ pub fn render_index_html(
       {clone_box_html}
     </header>
 
-    <!-- Navigation Tabs -->
-    <nav class="repo-nav">
-      <a href="./" class="active">Code</a>
-      <a href="log.html">Commits ({})</a>
-      <a href="meta.json">Raw Metadata</a>
-    </nav>
+{nav_html}
 
     {latest_commit_html}
 
@@ -253,8 +308,7 @@ pub fn render_index_html(
   </div>
 </body>
 </html>
-"#,
-        meta.stats.commit_count
+"#
     )
 }
 
@@ -263,6 +317,7 @@ pub fn render_index_html(
 pub fn render_log_html(meta: &SendforgeRepoMeta, commits: &[CommitObject]) -> String {
     let repo_name_esc = escape_html(&meta.name);
     let updated_at_esc = escape_html(&meta.updated_at);
+    let nav_html = render_nav_bar(NavTab::Commits, meta, 0);
 
     let commit_items = if commits.is_empty() {
         r#"        <li class="commit-item empty-commits"><p>No commits recorded yet.</p></li>"#
@@ -306,11 +361,7 @@ pub fn render_log_html(meta: &SendforgeRepoMeta, commits: &[CommitObject]) -> St
     <header class="forge-header">
       <h1><a href="./">{repo_name_esc}</a> / Commits</h1>
     </header>
-    <nav class="repo-nav">
-      <a href="./">Code</a>
-      <a href="log.html" class="active">Commits ({})</a>
-      <a href="meta.json">Raw Metadata</a>
-    </nav>
+{nav_html}
     <main class="commit-log">
       <ul class="commit-list">
 {commit_items}      </ul>
@@ -322,7 +373,446 @@ pub fn render_log_html(meta: &SendforgeRepoMeta, commits: &[CommitObject]) -> St
   </div>
 </body>
 </html>
+"#
+    )
+}
+
+fn build_labels_badge_list(labels: &[String]) -> String {
+    let mut labels_html = String::new();
+    for label in labels {
+        let label_esc = escape_html(label);
+        let _ = write!(
+            labels_html,
+            r#"<span class="badge badge-label">{label_esc}</span> "#
+        );
+    }
+    labels_html
+}
+
+fn build_pr_list_items(pulls: &[PullRequest]) -> String {
+    if pulls.is_empty() {
+        return r#"        <li class="collab-item empty-collab empty-pulls"><p>No pull requests found.</p></li>"#.to_string();
+    }
+
+    let mut out = String::new();
+    for pull in pulls {
+        let id_esc = escape_html(&pull.id);
+        let title_esc = escape_html(&pull.title);
+        let author_name_esc = escape_html(&pull.author.name);
+        let target_branch_esc = escape_html(&pull.target_branch);
+        let source_branch_esc = escape_html(&pull.source_branch);
+        let created_at_iso = format_timestamp_iso(pull.created_at);
+
+        let (status_badge, status_class) = match pull.status {
+            PullRequestStatus::Open => ("🟢 Open", "badge-open"),
+            PullRequestStatus::Merged => ("🟣 Merged", "badge-merged"),
+            PullRequestStatus::Closed => ("🔴 Closed", "badge-closed"),
+        };
+
+        let labels_html = build_labels_badge_list(&pull.labels);
+        let comment_badge = if pull.comments.is_empty() {
+            String::new()
+        } else {
+            format!(
+                r#"<span class="comment-count">💬 {}</span>"#,
+                pull.comments.len()
+            )
+        };
+
+        let _ = writeln!(
+            out,
+            r#"        <li class="collab-item pr-item">
+          <div class="collab-item-header">
+            <span class="badge badge-status {status_class}">{status_badge}</span>
+            <a href="pulls/{id_esc}.html" class="collab-title">#{number} {title_esc}</a>
+            {labels_html}
+          </div>
+          <div class="collab-item-meta">
+            <span>#{number} opened on <time datetime="{created_at_iso}">{created_at_iso}</time> by <strong>{author_name_esc}</strong></span>
+            <span class="branch-flow"><code>{target_branch_esc}</code> ← <code>{source_branch_esc}</code></span>
+            {comment_badge}
+          </div>
+        </li>"#,
+            number = pull.number
+        );
+    }
+    out
+}
+
+/// Pre-renders the zero-JS `pulls.html` pull request list page fallback.
+#[must_use]
+pub fn render_pulls_html(meta: &SendforgeRepoMeta, pulls: &[PullRequest]) -> String {
+    let repo_name_esc = escape_html(&meta.name);
+    let desc_esc = meta
+        .description
+        .as_deref()
+        .map_or_else(String::new, escape_html);
+    let default_branch_esc = escape_html(&meta.default_branch);
+    let updated_at_esc = escape_html(&meta.updated_at);
+    let nav_html = render_nav_bar(NavTab::Pulls, meta, 0);
+
+    let open_count = pulls
+        .iter()
+        .filter(|p| p.status == PullRequestStatus::Open)
+        .count();
+    let merged_count = pulls
+        .iter()
+        .filter(|p| p.status == PullRequestStatus::Merged)
+        .count();
+    let closed_count = pulls
+        .iter()
+        .filter(|p| p.status == PullRequestStatus::Closed)
+        .count();
+
+    let items_html = build_pr_list_items(pulls);
+
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pull Requests - {repo_name_esc} - Sendforge</title>
+  <meta name="description" content="{desc_esc}">
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <div id="app">
+    <header class="forge-header">
+      <div class="repo-title">
+        <h1><a href="./">{repo_name_esc}</a> / Pull Requests</h1>
+        <span class="badge">{default_branch_esc}</span>
+      </div>
+      <p class="repo-desc">{desc_esc}</p>
+    </header>
+
+{nav_html}
+
+    <main class="collab-container">
+      <div class="collab-filter-bar">
+        <span class="filter-pill active">🟢 {open_count} Open</span>
+        <span class="filter-pill">🟣 {merged_count} Merged</span>
+        <span class="filter-pill">🔴 {closed_count} Closed</span>
+      </div>
+      <ul class="collab-list pr-list">
+{items_html}      </ul>
+    </main>
+
+    <footer class="forge-footer">
+      <span>Powered by <strong>Sendforge</strong> (Static-First Git Forge)</span>
+      <span>Last updated: {updated_at_esc}</span>
+    </footer>
+  </div>
+</body>
+</html>
+"#
+    )
+}
+
+fn build_issue_list_items(issues: &[Issue]) -> String {
+    if issues.is_empty() {
+        return r#"        <li class="collab-item empty-collab empty-issues"><p>No issues found.</p></li>"#
+            .to_string();
+    }
+
+    let mut out = String::new();
+    for issue in issues {
+        let id_esc = escape_html(&issue.id);
+        let title_esc = escape_html(&issue.title);
+        let author_name_esc = escape_html(&issue.author.name);
+        let created_at_iso = format_timestamp_iso(issue.created_at);
+
+        let (status_badge, status_class) = match issue.status {
+            IssueStatus::Open => ("🟢 Open", "badge-open"),
+            IssueStatus::Closed => ("🔴 Closed", "badge-closed"),
+        };
+
+        let labels_html = build_labels_badge_list(&issue.labels);
+        let comment_badge = if issue.comments.is_empty() {
+            String::new()
+        } else {
+            format!(
+                r#"<span class="comment-count">💬 {}</span>"#,
+                issue.comments.len()
+            )
+        };
+
+        let _ = writeln!(
+            out,
+            r#"        <li class="collab-item issue-item">
+          <div class="collab-item-header">
+            <span class="badge badge-status {status_class}">{status_badge}</span>
+            <a href="issues/{id_esc}.html" class="collab-title">#{number} {title_esc}</a>
+            {labels_html}
+          </div>
+          <div class="collab-item-meta">
+            <span>#{number} opened on <time datetime="{created_at_iso}">{created_at_iso}</time> by <strong>{author_name_esc}</strong></span>
+            {comment_badge}
+          </div>
+        </li>"#,
+            number = issue.number
+        );
+    }
+    out
+}
+
+/// Pre-renders the zero-JS `issues.html` issue list page fallback.
+#[must_use]
+pub fn render_issues_html(meta: &SendforgeRepoMeta, issues: &[Issue]) -> String {
+    let repo_name_esc = escape_html(&meta.name);
+    let desc_esc = meta
+        .description
+        .as_deref()
+        .map_or_else(String::new, escape_html);
+    let default_branch_esc = escape_html(&meta.default_branch);
+    let updated_at_esc = escape_html(&meta.updated_at);
+    let nav_html = render_nav_bar(NavTab::Issues, meta, 0);
+
+    let open_count = issues
+        .iter()
+        .filter(|i| i.status == IssueStatus::Open)
+        .count();
+    let closed_count = issues
+        .iter()
+        .filter(|i| i.status == IssueStatus::Closed)
+        .count();
+
+    let items_html = build_issue_list_items(issues);
+
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Issues - {repo_name_esc} - Sendforge</title>
+  <meta name="description" content="{desc_esc}">
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <div id="app">
+    <header class="forge-header">
+      <div class="repo-title">
+        <h1><a href="./">{repo_name_esc}</a> / Issues</h1>
+        <span class="badge">{default_branch_esc}</span>
+      </div>
+      <p class="repo-desc">{desc_esc}</p>
+    </header>
+
+{nav_html}
+
+    <main class="collab-container">
+      <div class="collab-filter-bar">
+        <span class="filter-pill active">🟢 {open_count} Open</span>
+        <span class="filter-pill">🔴 {closed_count} Closed</span>
+      </div>
+      <ul class="collab-list issue-list">
+{items_html}      </ul>
+    </main>
+
+    <footer class="forge-footer">
+      <span>Powered by <strong>Sendforge</strong> (Static-First Git Forge)</span>
+      <span>Last updated: {updated_at_esc}</span>
+    </footer>
+  </div>
+</body>
+</html>
+"#
+    )
+}
+
+fn build_comments_html(comments: &[Comment], empty_msg: &str) -> String {
+    if comments.is_empty() {
+        return format!(r#"<p class="no-comments">{empty_msg}</p>"#);
+    }
+
+    let mut comments_html = String::new();
+    for comment in comments {
+        let c_author_esc = escape_html(&comment.author.name);
+        let c_date_iso = format_timestamp_iso(comment.created_at);
+        let c_body_html = render_markdown(&comment.body);
+
+        let _ = writeln!(
+            comments_html,
+            r#"        <div class="collab-comment-card">
+          <div class="comment-header">
+            <strong>{c_author_esc}</strong> commented on <time datetime="{c_date_iso}">{c_date_iso}</time>
+          </div>
+          <div class="comment-body markdown-body">
+            {c_body_html}
+          </div>
+        </div>"#
+        );
+    }
+    comments_html
+}
+
+/// Pre-renders individual zero-JS `pulls/<id>.html` PR detail fallback.
+#[must_use]
+pub fn render_pull_detail_html(meta: &SendforgeRepoMeta, pull: &PullRequest) -> String {
+    let repo_name_esc = escape_html(&meta.name);
+    let title_esc = escape_html(&pull.title);
+    let author_name_esc = escape_html(&pull.author.name);
+    let target_branch_esc = escape_html(&pull.target_branch);
+    let source_branch_esc = escape_html(&pull.source_branch);
+    let head_commit_esc = escape_html(&pull.head_commit);
+    let updated_at_esc = escape_html(&meta.updated_at);
+    let created_at_iso = format_timestamp_iso(pull.created_at);
+    let nav_html = render_nav_bar(NavTab::Pulls, meta, 1);
+
+    let (status_badge, status_class) = match pull.status {
+        PullRequestStatus::Open => ("🟢 Open", "badge-open"),
+        PullRequestStatus::Merged => ("🟣 Merged", "badge-merged"),
+        PullRequestStatus::Closed => ("🔴 Closed", "badge-closed"),
+    };
+
+    let labels_html = build_labels_badge_list(&pull.labels);
+    let rendered_desc = if pull.description.trim().is_empty() {
+        "<p class=\"empty-desc\"><em>No description provided.</em></p>".to_string()
+    } else {
+        render_markdown(&pull.description)
+    };
+
+    let comments_html =
+        build_comments_html(&pull.comments, "No comments on this pull request yet.");
+
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>#{number} {title_esc} - Pull Requests - {repo_name_esc} - Sendforge</title>
+  <link rel="stylesheet" href="../style.css">
+  <script type="module" src="../app.js"></script>
+</head>
+<body>
+  <div id="app">
+    <header class="forge-header">
+      <div class="repo-title">
+        <h1><a href="../">{repo_name_esc}</a> / <a href="../pulls.html">Pull Requests</a> / #{number}</h1>
+      </div>
+    </header>
+
+{nav_html}
+
+    <main class="collab-detail-container">
+      <div class="collab-detail-header">
+        <h2 class="collab-detail-title">{title_esc} <span class="collab-id-badge">#{number}</span></h2>
+        <div class="collab-detail-meta">
+          <span class="badge badge-status {status_class}">{status_badge}</span>
+          <span><strong>{author_name_esc}</strong> wants to merge into <code>{target_branch_esc}</code> from <code>{source_branch_esc}</code></span>
+          <span class="head-sha">Commit: <code>{head_commit_esc}</code></span>
+          {labels_html}
+        </div>
+      </div>
+
+      <article class="collab-description-card">
+        <div class="card-header">
+          <strong>{author_name_esc}</strong> opened this pull request on <time datetime="{created_at_iso}">{created_at_iso}</time>
+        </div>
+        <div class="card-body markdown-body">
+          {rendered_desc}
+        </div>
+      </article>
+
+      <section class="collab-timeline">
+        <h3>Discussion ({comments_count})</h3>
+{comments_html}      </section>
+    </main>
+
+    <footer class="forge-footer">
+      <span>Powered by <strong>Sendforge</strong> (Static-First Git Forge)</span>
+      <span>Last updated: {updated_at_esc}</span>
+    </footer>
+  </div>
+</body>
+</html>
 "#,
-        meta.stats.commit_count
+        number = pull.number,
+        comments_count = pull.comments.len()
+    )
+}
+
+/// Pre-renders individual zero-JS `issues/<id>.html` Issue detail fallback.
+#[must_use]
+pub fn render_issue_detail_html(meta: &SendforgeRepoMeta, issue: &Issue) -> String {
+    let repo_name_esc = escape_html(&meta.name);
+    let title_esc = escape_html(&issue.title);
+    let author_name_esc = escape_html(&issue.author.name);
+    let updated_at_esc = escape_html(&meta.updated_at);
+    let created_at_iso = format_timestamp_iso(issue.created_at);
+    let nav_html = render_nav_bar(NavTab::Issues, meta, 1);
+
+    let (status_badge, status_class) = match issue.status {
+        IssueStatus::Open => ("🟢 Open", "badge-open"),
+        IssueStatus::Closed => ("🔴 Closed", "badge-closed"),
+    };
+
+    let labels_html = build_labels_badge_list(&issue.labels);
+    let rendered_desc = if issue.description.trim().is_empty() {
+        "<p class=\"empty-desc\"><em>No description provided.</em></p>".to_string()
+    } else {
+        render_markdown(&issue.description)
+    };
+
+    let comments_html = build_comments_html(&issue.comments, "No comments on this issue yet.");
+
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>#{number} {title_esc} - Issues - {repo_name_esc} - Sendforge</title>
+  <link rel="stylesheet" href="../style.css">
+  <script type="module" src="../app.js"></script>
+</head>
+<body>
+  <div id="app">
+    <header class="forge-header">
+      <div class="repo-title">
+        <h1><a href="../">{repo_name_esc}</a> / <a href="../issues.html">Issues</a> / #{number}</h1>
+      </div>
+    </header>
+
+{nav_html}
+
+    <main class="collab-detail-container">
+      <div class="collab-detail-header">
+        <h2 class="collab-detail-title">{title_esc} <span class="collab-id-badge">#{number}</span></h2>
+        <div class="collab-detail-meta">
+          <span class="badge badge-status {status_class}">{status_badge}</span>
+          <span>Opened on <time datetime="{created_at_iso}">{created_at_iso}</time> by <strong>{author_name_esc}</strong></span>
+          {labels_html}
+        </div>
+      </div>
+
+      <article class="collab-description-card">
+        <div class="card-header">
+          <strong>{author_name_esc}</strong> opened this issue on <time datetime="{created_at_iso}">{created_at_iso}</time>
+        </div>
+        <div class="card-body markdown-body">
+          {rendered_desc}
+        </div>
+      </article>
+
+      <section class="collab-timeline">
+        <h3>Discussion ({comments_count})</h3>
+{comments_html}      </section>
+    </main>
+
+    <footer class="forge-footer">
+      <span>Powered by <strong>Sendforge</strong> (Static-First Git Forge)</span>
+      <span>Last updated: {updated_at_esc}</span>
+    </footer>
+  </div>
+</body>
+</html>
+"#,
+        number = issue.number,
+        comments_count = issue.comments.len()
     )
 }

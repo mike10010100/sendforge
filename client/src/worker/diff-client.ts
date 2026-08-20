@@ -1,24 +1,31 @@
 import { computeFileDiff } from './diff-algo.js';
 import type {
+  DiffBatchItemInput,
   DiffWorkerRequest,
   DiffWorkerResponse,
   FileDiff,
 } from './diff-types.js';
 
 export interface DiffComputeOptions {
-  readonly contextLines?: number;
-  readonly isBinary?: boolean;
+  readonly contextLines?: number | undefined;
+  readonly isBinary?: boolean | undefined;
 }
+
+type PendingHandler =
+  | {
+      readonly type: 'SINGLE';
+      readonly resolve: (diff: FileDiff) => void;
+      readonly reject: (err: Error) => void;
+    }
+  | {
+      readonly type: 'BATCH';
+      readonly resolve: (diffs: readonly FileDiff[]) => void;
+      readonly reject: (err: Error) => void;
+    };
 
 export class DiffClient {
   private worker: Worker | null = null;
-  private readonly pendingRequests = new Map<
-    string,
-    {
-      resolve: (diff: FileDiff) => void;
-      reject: (err: Error) => void;
-    }
-  >();
+  private readonly pendingRequests = new Map<string, PendingHandler>();
   private requestIdCounter = 0;
 
   constructor() {
@@ -42,7 +49,12 @@ export class DiffClient {
 
           if (res.type === 'DIFF_ERROR') {
             handler.reject(new Error(res.error));
-          } else {
+          } else if (res.type === 'BATCH_DIFF_RESULT' && handler.type === 'BATCH') {
+            handler.resolve(res.results);
+          } else if (
+            (res.type === 'DIFF_RESULT' || res.type === 'DIFF_SUCCESS') &&
+            handler.type === 'SINGLE'
+          ) {
             handler.resolve({
               oldPath: res.oldPath,
               newPath: res.newPath,
@@ -56,7 +68,6 @@ export class DiffClient {
         };
 
         this.worker.onerror = (err) => {
-          // If worker errors out, reject all pending
           for (const [id, handler] of this.pendingRequests.entries()) {
             handler.reject(new Error(`Worker error: ${err.message}`));
             this.pendingRequests.delete(id);
@@ -69,7 +80,7 @@ export class DiffClient {
   }
 
   /**
-   * Computes a file diff using the Web Worker, falling back to main-thread execution if unavailable.
+   * Computes a single file diff using the Web Worker, falling back to main-thread execution if unavailable.
    */
   public async computeDiff(
     oldPath: string | null,
@@ -79,7 +90,6 @@ export class DiffClient {
     options?: DiffComputeOptions
   ): Promise<FileDiff> {
     if (!this.worker) {
-      // In-thread fallback
       return computeFileDiff(
         oldPath,
         newPath,
@@ -103,7 +113,56 @@ export class DiffClient {
     };
 
     return new Promise<FileDiff>((resolve, reject) => {
-      this.pendingRequests.set(id, { resolve, reject });
+      this.pendingRequests.set(id, { type: 'SINGLE', resolve, reject });
+      if (this.worker) {
+        this.worker.postMessage(req);
+      }
+    });
+  }
+
+  /**
+   * Computes batch file diffs in the Web Worker, falling back to main-thread execution if unavailable.
+   */
+  public async computeBatchDiff(
+    items: readonly DiffBatchItemInput[],
+    options?: DiffComputeOptions
+  ): Promise<readonly FileDiff[]> {
+    if (items.length === 0) {
+      return [];
+    }
+
+    if (!this.worker) {
+      return items.map((item) => {
+        const fd = computeFileDiff(
+          item.oldPath,
+          item.newPath,
+          item.oldContent,
+          item.newContent,
+          item.contextLines ?? options?.contextLines ?? 3,
+          item.isBinary ?? false
+        );
+        return {
+          ...fd,
+          ...(item.status !== undefined ? { status: item.status } : {}),
+          ...(item.oldOid !== undefined ? { oldOid: item.oldOid } : {}),
+          ...(item.newOid !== undefined ? { newOid: item.newOid } : {}),
+          ...(item.oldMode !== undefined ? { oldMode: item.oldMode } : {}),
+          ...(item.newMode !== undefined ? { newMode: item.newMode } : {}),
+          ...(item.modeChanged !== undefined ? { modeChanged: item.modeChanged } : {}),
+        };
+      });
+    }
+
+    const id = `batch_diff_req_${++this.requestIdCounter}_${Date.now()}`;
+    const req: DiffWorkerRequest = {
+      id,
+      type: 'COMPUTE_BATCH_DIFF',
+      items,
+      ...(options?.contextLines !== undefined ? { contextLines: options.contextLines } : {}),
+    };
+
+    return new Promise<readonly FileDiff[]>((resolve, reject) => {
+      this.pendingRequests.set(id, { type: 'BATCH', resolve, reject });
       if (this.worker) {
         this.worker.postMessage(req);
       }

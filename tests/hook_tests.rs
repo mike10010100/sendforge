@@ -164,3 +164,68 @@ fn test_hook_pipeline_empty_repo() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+#[test]
+fn test_hook_pipeline_emits_collaboration_assets() -> Result<(), Box<dyn std::error::Error>> {
+    let dir = tempdir()?;
+    let repo_path = dir.path().join("collab_hook.git");
+
+    let init_opts = InitOptions {
+        name: Some("collab-hook-test".into()),
+        default_branch: Some("main".into()),
+        ..Default::default()
+    };
+    init_bare_repo(&repo_path, &init_opts)?;
+
+    // 1. Commit on main
+    let tree_sha = write_loose_object(&repo_path, ObjectType::Tree, b"")?;
+    let commit_text = format!(
+        "tree {tree_sha}\nauthor Alice <alice@example.com> 1740000000 +0000\ncommitter Alice <alice@example.com> 1740000000 +0000\n\nInitial main commit\n"
+    );
+    let commit_main = write_loose_object(&repo_path, ObjectType::Commit, commit_text.as_bytes())?;
+    fs::write(
+        repo_path.join("refs/heads/main"),
+        format!("{commit_main}\n"),
+    )?;
+
+    // 2. Add PR ref and Issue ref
+    let pr_tree_sha = write_loose_object(&repo_path, ObjectType::Tree, b"")?;
+    let pr_commit_text = format!(
+        "tree {pr_tree_sha}\nparent {commit_main}\nauthor Alice <alice@example.com> 1740000000 +0000\ncommitter Alice <alice@example.com> 1740000000 +0000\n\nPR head commit\n"
+    );
+    let pr_commit = write_loose_object(&repo_path, ObjectType::Commit, pr_commit_text.as_bytes())?;
+    let pr_dir = repo_path.join("refs/pull/1");
+    fs::create_dir_all(&pr_dir)?;
+    fs::write(pr_dir.join("head"), format!("{pr_commit}\n"))?;
+
+    let issue_dir = repo_path.join("refs/issues");
+    fs::create_dir_all(&issue_dir)?;
+    let issue_tree_sha = write_loose_object(&repo_path, ObjectType::Tree, b"")?;
+    let issue_commit_text = format!(
+        "tree {issue_tree_sha}\nauthor Alice <alice@example.com> 1740000000 +0000\ncommitter Alice <alice@example.com> 1740000000 +0000\n\nBug in parser\n"
+    );
+    let issue_commit =
+        write_loose_object(&repo_path, ObjectType::Commit, issue_commit_text.as_bytes())?;
+    fs::write(issue_dir.join("1"), format!("{issue_commit}\n"))?;
+
+    // 3. Execute hook update
+    run_hook_update(&repo_path, None, true)?;
+
+    // 4. Verify generated static files
+    let static_dir = repo_path.join("static");
+    assert!(static_dir.join("meta.json").is_file());
+    assert!(static_dir.join("pulls.json").is_file());
+    assert!(static_dir.join("issues.json").is_file());
+    assert!(static_dir.join("pulls.html").is_file());
+    assert!(static_dir.join("issues.html").is_file());
+    assert!(static_dir.join("pulls/1.html").is_file());
+    assert!(static_dir.join("issues/1.html").is_file());
+
+    // 5. Verify stats inside meta.json
+    let meta_str = fs::read_to_string(static_dir.join("meta.json"))?;
+    let meta: SendforgeRepoMeta = serde_json::from_str(&meta_str)?;
+    assert_eq!(meta.stats.pull_count, 1);
+    assert_eq!(meta.stats.issue_count, 1);
+
+    Ok(())
+}

@@ -23,6 +23,46 @@ pub struct RefEntry {
     pub peeled_sha: Option<String>,
 }
 
+impl RefEntry {
+    /// Creates a new `RefEntry` by inspecting prefix patterns.
+    #[must_use]
+    pub fn new(name: String, sha: String) -> Self {
+        let is_branch = name.starts_with("refs/heads/");
+        let is_tag = name.starts_with("refs/tags/");
+        Self {
+            name,
+            sha,
+            is_branch,
+            is_tag,
+            peeled_sha: None,
+        }
+    }
+
+    /// Returns true if this ref is a Pull Request head commit ref (`refs/pull/<id>/head`).
+    #[must_use]
+    pub fn is_pull_head(&self) -> bool {
+        self.name.starts_with("refs/pull/") && self.name.ends_with("/head")
+    }
+
+    /// Returns true if this ref is a Pull Request metadata ref (`refs/pull/<id>/meta`).
+    #[must_use]
+    pub fn is_pull_meta(&self) -> bool {
+        self.name.starts_with("refs/pull/") && self.name.ends_with("/meta")
+    }
+
+    /// Returns true if this ref is an Issue ref (`refs/issues/<id>`).
+    #[must_use]
+    pub fn is_issue(&self) -> bool {
+        self.name.starts_with("refs/issues/")
+    }
+
+    /// Returns true if this ref is a Review Notes ref (`refs/notes/reviews` or `refs/notes/*`).
+    #[must_use]
+    pub fn is_review_note(&self) -> bool {
+        self.name == "refs/notes/reviews" || self.name.starts_with("refs/notes/")
+    }
+}
+
 /// Resolved `HEAD` pointer representation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HeadPointer {
@@ -85,12 +125,10 @@ pub fn resolve_head_commit(repo_path: &Path) -> Result<Option<String>> {
     }
 }
 
-/// Recursively discovers all loose references under a subdirectory (e.g. `refs/heads` or `refs/tags`).
-fn collect_loose_refs_dir(
+/// Recursively discovers all loose references under `<repo>/refs`.
+fn collect_loose_refs_recursive(
     dir_path: &Path,
     prefix: &str,
-    is_branch: bool,
-    is_tag: bool,
     refs_map: &mut BTreeMap<String, RefEntry>,
 ) -> Result<()> {
     if !dir_path.is_dir() {
@@ -109,22 +147,13 @@ fn collect_loose_refs_dir(
 
         if path.is_dir() {
             let sub_prefix = format!("{prefix}{name_str}/");
-            collect_loose_refs_dir(&path, &sub_prefix, is_branch, is_tag, refs_map)?;
+            collect_loose_refs_recursive(&path, &sub_prefix, refs_map)?;
         } else if path.is_file() {
             let ref_name = format!("{prefix}{name_str}");
             let content = fs::read_to_string(&path)?;
             let sha = content.trim().to_string();
             if sha.len() == 40 && sha.chars().all(|c| c.is_ascii_hexdigit()) {
-                refs_map.insert(
-                    ref_name.clone(),
-                    RefEntry {
-                        name: ref_name,
-                        sha,
-                        is_branch,
-                        is_tag,
-                        peeled_sha: None,
-                    },
-                );
+                refs_map.insert(ref_name.clone(), RefEntry::new(ref_name, sha));
             }
         }
     }
@@ -165,15 +194,7 @@ fn read_packed_refs(repo_path: &Path) -> Result<BTreeMap<String, RefEntry>> {
         let mut parts = trimmed.split_ascii_whitespace();
         if let (Some(sha), Some(name)) = (parts.next(), parts.next()) {
             if sha.len() == 40 && sha.chars().all(|c| c.is_ascii_hexdigit()) {
-                let is_branch = name.starts_with("refs/heads/");
-                let is_tag = name.starts_with("refs/tags/");
-                let entry = RefEntry {
-                    name: name.to_string(),
-                    sha: sha.to_string(),
-                    is_branch,
-                    is_tag,
-                    peeled_sha: None,
-                };
+                let entry = RefEntry::new(name.to_string(), sha.to_string());
                 last_ref_name = Some(name.to_string());
                 packed_map.insert(name.to_string(), entry);
             }
@@ -193,15 +214,11 @@ pub fn discover_all_refs(repo_path: &Path) -> Result<BTreeMap<String, RefEntry>>
     // 1. Read packed-refs first as base
     let mut refs_map = read_packed_refs(repo_path)?;
 
-    // 2. Discover loose branches (overriding packed-refs)
-    let heads_dir = repo_path.join("refs").join("heads");
-    collect_loose_refs_dir(&heads_dir, "refs/heads/", true, false, &mut refs_map)?;
+    // 2. Discover all loose references recursively under <repo>/refs
+    let refs_dir = repo_path.join("refs");
+    collect_loose_refs_recursive(&refs_dir, "refs/", &mut refs_map)?;
 
-    // 3. Discover loose tags (overriding packed-refs)
-    let tags_dir = repo_path.join("refs").join("tags");
-    collect_loose_refs_dir(&tags_dir, "refs/tags/", false, true, &mut refs_map)?;
-
-    // 4. Resolve peeled tags for any tag entries lacking a peeled_sha
+    // 3. Resolve peeled tags for any tag entries lacking a peeled_sha
     for entry in refs_map.values_mut() {
         if entry.is_tag && entry.peeled_sha.is_none() {
             if let Ok(peeled) = peel_tag(repo_path, &entry.sha) {

@@ -38,6 +38,7 @@ export class SendforgeHttpClient {
       headers: resHeaders,
       buffer,
       text,
+      body: text,
       json: () => {
         try {
           return JSON.parse(text);

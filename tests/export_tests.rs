@@ -70,3 +70,65 @@ fn test_export_no_objects_flag() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+#[test]
+fn test_export_static_site_includes_all_collab_assets() -> Result<(), Box<dyn std::error::Error>> {
+    use flate2::write::ZlibEncoder;
+    use flate2::Compression;
+    use sendforge::repo::objects::{compute_object_sha, ObjectType};
+    use std::io::Write;
+
+    let dir = tempdir()?;
+    let repo_path = dir.path().join("export_src.git");
+    let export_dir = dir.path().join("exported_site");
+
+    init_bare_repo(&repo_path, &InitOptions::default())?;
+
+    // Create helper to write loose object
+    let write_obj =
+        |obj_type: ObjectType, content: &[u8]| -> Result<String, Box<dyn std::error::Error>> {
+            let sha = compute_object_sha(obj_type, content);
+            let obj_dir = repo_path.join("objects").join(&sha[..2]);
+            fs::create_dir_all(&obj_dir)?;
+
+            let mut uncompressed = Vec::new();
+            let header = format!("{obj_type} {}\0", content.len());
+            uncompressed.extend_from_slice(header.as_bytes());
+            uncompressed.extend_from_slice(content);
+
+            let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+            encoder.write_all(&uncompressed)?;
+            let compressed = encoder.finish()?;
+
+            let obj_file = obj_dir.join(&sha[2..]);
+            fs::write(obj_file, compressed)?;
+            Ok(sha)
+        };
+
+    let tree_sha = write_obj(ObjectType::Tree, b"")?;
+    let commit_text = format!(
+        "tree {tree_sha}\nauthor Alice <alice@example.com> 1740000000 +0000\ncommitter Alice <alice@example.com> 1740000000 +0000\n\nPR Commit\n"
+    );
+    let pr_commit = write_obj(ObjectType::Commit, commit_text.as_bytes())?;
+
+    let pr_dir = repo_path.join("refs/pull/1");
+    fs::create_dir_all(&pr_dir)?;
+    fs::write(pr_dir.join("head"), format!("{pr_commit}\n"))?;
+
+    let options = ExportOptions {
+        frontend_dist: None,
+        base_url: Some("/".into()),
+        no_objects: false,
+    };
+
+    export_static_site(&repo_path, &export_dir, &options)?;
+
+    // Assert exported collab files
+    assert!(export_dir.join("pulls.json").is_file());
+    assert!(export_dir.join("issues.json").is_file());
+    assert!(export_dir.join("pulls.html").is_file());
+    assert!(export_dir.join("issues.html").is_file());
+    assert!(export_dir.join("pulls/1.html").is_file());
+
+    Ok(())
+}

@@ -7,45 +7,49 @@
   "branches": [
     {
       "name": "main",
-      "target": "8208a0705592f524b829b0d0db0998f61acfcd97",
+      "target": "391c7f72379a9fd84cc4f7c829dd82095a1ce0ab",
       "is_default": true,
-      "latest_commit_date": "2026-08-20T03:37:37Z"
+      "latest_commit_date": "2026-08-20T03:52:37Z"
     }
   ],
   "tags": [],
   "head": {
     "ref": "refs/heads/main",
-    "sha": "8208a0705592f524b829b0d0db0998f61acfcd97"
+    "sha": "391c7f72379a9fd84cc4f7c829dd82095a1ce0ab"
   },
   "latest_commit": {
-    "id": "8208a0705592f524b829b0d0db0998f61acfcd97",
-    "short_id": "8208a07",
-    "tree": "231fb73466dd488e5003eb1a8e3e0ade42c70ea8",
+    "id": "391c7f72379a9fd84cc4f7c829dd82095a1ce0ab",
+    "short_id": "391c7f7",
+    "tree": "cec9b143f8cd675ebeeed362f04de5381aaa6a69",
     "parents": [
-      "30d542606f057b0f21574ede2bf89c89e269729c"
+      "8208a0705592f524b829b0d0db0998f61acfcd97"
     ],
     "author": {
       "name": "Michael Paulauski",
       "email": "mike10010100@gmail.com",
-      "timestamp": 1787197057,
-      "date": "2026-08-20T03:37:37Z"
+      "timestamp": 1787197957,
+      "date": "2026-08-20T03:52:37Z"
     },
     "committer": {
       "name": "Michael Paulauski",
       "email": "mike10010100@gmail.com",
-      "timestamp": 1787197057,
-      "date": "2026-08-20T03:37:37Z"
+      "timestamp": 1787197957,
+      "date": "2026-08-20T03:52:37Z"
     },
-    "message": "ci: fix rustfmt check and modernize cloudflare deploy workflow step",
-    "summary": "ci: fix rustfmt check and modernize cloudflare deploy workflow step"
+    "message": "feat(ui): integrate commit diffs directly under commits tab with back navigation",
+    "summary": "feat(ui): integrate commit diffs directly under commits tab with back navigation"
   },
   "stats": {
     "branch_count": 1,
     "tag_count": 0,
-    "commit_count": 15,
-    "file_count": 19
+    "commit_count": 16,
+    "file_count": 19,
+    "pull_count": 0,
+    "open_pull_count": 0,
+    "issue_count": 0,
+    "open_issue_count": 0
   },
   "has_readme": true,
   "readme_filename": "README.md",
-  "updated_at": "2026-08-20T03:52:15Z"
+  "updated_at": "2026-08-20T05:29:12Z"
 }

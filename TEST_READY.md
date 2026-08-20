@@ -1,98 +1,133 @@
-# Sendforge Phase 2 E2E Test Suite Ready
+# Sendforge Phase 3 E2E Test Suite Ready
 
-The Phase 2 Multi-Tier End-to-End (E2E) Test Suite for Sendforge has been fully designed, implemented, and verified.
+The Phase 3 Multi-Tier End-to-End (E2E) Test Suite for Sendforge has been fully designed, implemented, and verified.
 
 ## 1. Test Suite Summary
 
-- **Total Test Suites**: 37 suites across 4 tiers
-- **Total Executed Tests**: 168 tests
-- **Phase 2 Test Suites Added**: 14 suites (50 new dedicated Phase 2 tests)
-- **Harness Extensions**: 2 new modules (`archive_validator.js`, `blame_helper.js`)
-- **Pass Rate**: 100% (168 / 168 passing, 0 failures, 0 skipped)
-- **Execution Time**: ~78 seconds
+- **Total Test Suites**: 54 suites across 4 tiers
+- **Total Executed Tests**: 234 tests
+- **Phase 3 Test Suites Added**: 17 suites (66 new dedicated Phase 3 tests)
+- **Harness Extensions**: `dag_helper.js` (LCA DAG traversal, commit history range, 3-way tree diffing) and `git_repo.js` collaboration ref helpers (`createPullRequest`, `createIssue`, `attachReviewNote`, DAG topologies)
+- **Pass Rate**: 100% (234 / 234 passing, 0 failures, 0 skipped)
 - **Execution Command**: `./e2e/run_e2e.sh` or `node e2e/runner.js`
 
 ---
 
-## 2. Test Inventory by Tier
+## 2. Phase 3 Test Inventory by Tier
 
-### Tier 1: Feature Coverage (>=5 tests per Phase 2 feature)
-- **R1: Tabbed Ref Selector** (`e2e/tier1_features/f17_tabbed_ref_selector.js`) — 6 tests
-  - `T1.17.1`: Dedicated Branches tab and Tags tab partition refs without overlap
-  - `T1.17.2`: Instantaneous client-side fuzzy search/filter logic
-  - `T1.17.3`: Visual metadata badges (default branch, 7-char short commit hash, tag annotations)
-  - `T1.17.4`: Keyboard navigation and accessibility (Escape, Enter, Tab state)
-  - `T1.17.5`: Empty search results state and special ref formatting
-  - `T1.17.6`: Selecting a ref updates client route while preserving file path
+### Tier 1: Feature Coverage (≥5 tests per Phase 3 feature)
 
-- **R2: In-Browser git blame** (`e2e/tier1_features/f18_in_browser_git_blame.js`) — 7 tests
-  - `T1.18.1`: Single-commit root attribution (all lines attributed to initial commit)
-  - `T1.18.2`: Multi-commit backward DAG traversal with Myers diff line mapping
-  - `T1.18.3`: Unmodified line preservation across multiple commits
-  - `T1.18.4`: Blame hunk aggregation (consecutive lines grouped into hunks)
-  - `T1.18.5`: Relative age heatmap scale calculation (0.0 oldest to 1.0 newest)
-  - `T1.18.6`: Interactive BlameView UI and diff links (`#/commit/{sha}`)
-  - `T1.18.7`: BlobView Code/Blame toggle mode state transitions
+- **F21: Git Collaboration Ref Discovery & Serialization** (`e2e/tier1_features/f21_collab_export.js`) — 6 tests
+  - `T1.21.1`: `sendforge export` discovers `refs/pull/*` and serializes `pulls.json`
+  - `T1.21.2`: `sendforge export` discovers `refs/issues/*` and serializes `issues.json`
+  - `T1.21.3`: `meta.json` contains accurate issue and PR count stats (`issue_count`, `open_issue_count`, `pull_count`, `open_pull_count`)
+  - `T1.21.4`: `sendforge export` pre-renders static zero-JS HTML fallback pages (`pulls.html`, `issues.html`)
+  - `T1.21.5`: `sendforge hook` updates collaboration JSON files on ref update
+  - `T1.21.6`: Markdown sanitization prevents XSS in exported HTML fallback views
 
-- **R3: File Permalinks & Line Highlighting** (`e2e/tier1_features/f19_file_permalinks_highlighting.js`) — 6 tests
-  - `T1.19.1`: Single line hash parsing (`#L42`) and CSS highlight class application
-  - `T1.19.2`: Multi-line range hash parsing (`#L10-L25`) and inclusive highlighting
-  - `T1.19.3`: Shift-click multi-line selection algorithm (forward and backward selection)
-  - `T1.19.4`: Immutable commit SHA permalink generation
-  - `T1.19.5`: Hashchange event listener and deep link auto-scroll target calculation
-  - `T1.19.6`: Permalinks work identically in both Code View and Blame View
+- **F22: In-Browser DAG Merge-Base & LCA Engine** (`e2e/tier1_features/f22_merge_base.js`) — 6 tests
+  - `T1.22.1`: Simple fork LCA resolution matches branching base commit
+  - `T1.22.2`: Divergent branches with multiple commits resolve correct LCA
+  - `T1.22.3`: Fast-forward branch resolves target tip as LCA
+  - `T1.22.4`: Criss-cross merge topology resolves topological LCA
+  - `T1.22.5`: Disconnected orphan branches return null merge base
+  - `T1.22.6`: Commit history range `mergeBase..head` returns chronological PR commits
 
-- **R4: Raw Blob & Snapshot Archive Generation** (`e2e/tier1_features/f20_raw_blob_snapshot_archives.js`) — 6 tests
-  - `T1.20.1`: Raw blob content extraction and plain text display
-  - `T1.20.2`: Client-side ZIP archive generator creates valid PKWARE ZIP
-  - `T1.20.3`: Client-side Tarball generator creates valid POSIX ustar `.tar.gz`
-  - `T1.20.4`: Snapshot archive path prefixing matching git archive conventions
-  - `T1.20.5`: File mode preservation in archive headers (`0755` vs `0644`)
-  - `T1.20.6`: Download trigger filename and MIME type selection
+- **F23: Interactive Pull Request Viewer** (`e2e/tier1_features/f23_pr_viewer.js`) — 6 tests
+  - `T1.23.1`: PR List filtering by status (`open`, `merged`, `closed`) and author search
+  - `T1.23.2`: PR Detail Header displays status badge, branch pills, and author metadata
+  - `T1.23.3`: PR Detail Conversation tab renders markdown description and timeline
+  - `T1.23.4`: PR Detail Commits tab displays list of commits in PR
+  - `T1.23.5`: PR Detail Files Changed tab computes 3-way diff between merge base and head
+  - `T1.23.6`: Inline review notes attached to specific file and line are loadable
+
+- **F24: Interactive Issue Tracker** (`e2e/tier1_features/f24_issues_tracker.js`) — 6 tests
+  - `T1.24.1`: Issue List filtering by status (`open` vs `closed`) and author search
+  - `T1.24.2`: Label chip filtering and multi-label filtering logic
+  - `T1.24.3`: Issue Detail Header displays status badge, author info, and timestamps
+  - `T1.24.4`: Issue Detail Discussion renders Markdown body with headings and code blocks
+  - `T1.24.5`: Chronological discussion comments timeline with author metadata
+  - `T1.24.6`: Empty issue list state and no-matching-filter placeholder display
+
+- **F25: Integrated 4-Tab Navigation & Deep-Link Routing** (`e2e/tier1_features/f25_nav_routing.js`) — 6 tests
+  - `T1.25.1`: Top navigation bar structure contains 4 distinct tabs (`Code`, `Commits`, `Issues`, `Pull Requests`)
+  - `T1.25.2`: Count badges reflect metadata stats accurately
+  - `T1.25.3`: Hash deep linking router parses Issue routes (`#/issues` and `#/issues/<id>`)
+  - `T1.25.4`: Hash deep linking router parses PR routes and tabs (`#/pulls`, `#/pulls/<id>`, `#/pulls/<id>/files`, `#/pulls/<id>/commits`)
+  - `T1.25.5`: Route formatter generates valid hash strings from route AST
+  - `T1.25.6`: Unrecognized and malformed hash routes default safely to Code view
+
+---
 
 ### Tier 2: Boundary & Corner Cases
-- **`e2e/tier2_boundaries/b13_ref_selector_empty_and_special_refs.js`** — 4 tests
-  - `B13.1`: Zero-tag repository returns empty tags array without crashing
-  - `B13.2`: Ref filter with non-matching query displays empty match state
-  - `B13.3`: Special branch names (slashes, dots, unicode emojis) preserve character integrity
-  - `B13.4`: Lightweight tags and annotated tags distinguishable in ref list
 
-- **`e2e/tier2_boundaries/b14_blame_edge_cases.js`** — 5 tests
-  - `B14.1`: Blame on 0-byte empty file returns 0 lines without error
-  - `B14.2`: Blame on single-line file across revisions
-  - `B14.3`: Blame on file untouched across 20+ commits correctly identifies ancient commit
-  - `B14.4`: Blame on multi-parent merge commit traverses first-parent DAG
-  - `B14.5`: Binary file blame guard detects binary payload and refuses line diff
+- **`e2e/tier2_boundaries/b17_empty_collab.js`** — 5 tests
+  - `B17.1`: Zero PRs and Zero Issues in repo produce empty JSON arrays and 0 counts
+  - `B17.2`: Pre-rendered `pulls.html` and `issues.html` render friendly zero-state message
+  - `B17.3`: PR and Issue with empty comments array `[]` render cleanly without errors
+  - `B17.4`: PR and Issue with empty labels array `[]` render cleanly without badges
+  - `B17.5`: Empty or whitespace-only description renders without crashing markdown engine
 
-- **`e2e/tier2_boundaries/b15_permalink_boundary_cases.js`** — 5 tests
-  - `B15.1`: Degenerate single-line ranges (`#L15-L15`) normalize to `#L15`
-  - `B15.2`: Inverted line range (`#L50-L10`) normalizes to `start=10, end=50`
-  - `B15.3`: Out-of-bounds line numbers are safely clamped to file line count
-  - `B15.4`: Malformed and empty hash tokens return null without throwing errors
-  - `B15.5`: URL hash preservation during branch/commit ref switching
+- **`e2e/tier2_boundaries/b18_pathological_dags.js`** — 5 tests
+  - `B18.1`: Criss-cross merge with two candidate common ancestors resolves valid topological LCA
+  - `B18.2`: Deep linear chain (100 commits) computes merge base quickly without stack overflow
+  - `B18.3`: Disconnected orphan branches (0 shared history) safely return null merge base
+  - `B18.4`: Multi-parent octopus merge commits traversed cleanly without cycle lockup
+  - `B18.5`: Same-commit comparison (head == target) returns head as merge base with empty range
 
-- **`e2e/tier2_boundaries/b16_archive_generation_corner_cases.js`** — 5 tests
-  - `B16.1`: Empty file list produces valid empty ZIP and Tarball
-  - `B16.2`: Archive containing 0-byte empty files generates valid entries with CRC=0
-  - `B16.3`: Large tree archive with 150+ files parses and validates completely
-  - `B16.4`: Pure binary files preserve exact byte-for-byte SHA-256 in archives
-  - `B16.5`: POSIX ustar long path (>100 characters) prefix/name splitting compliance
+- **`e2e/tier2_boundaries/b19_large_diffs.js`** — 5 tests
+  - `B19.1`: PR with 50+ modified files generates complete tree diff list
+  - `B19.2`: Large text diff computes line additions and deletions accurately
+  - `B19.3`: PR containing binary files (e.g. image blobs) marked as binary diff
+  - `B19.4`: PR with file mode changes (`0644` to `0755`) preserves mode flag in tree diff
+  - `B19.5`: Zero-change PR (identical tree at head and base) produces empty file changes list
+
+- **`e2e/tier2_boundaries/b20_malformed_metadata.js`** — 5 tests
+  - `B20.1`: Non-JSON / corrupt payload in `refs/pull/*/meta` handled without crash
+  - `B20.2`: `refs/pull/<id>/head` pointing to non-existent commit handled safely
+  - `B20.3`: Non-numeric issue or PR IDs handled safely in export and hook
+  - `B20.4`: Corrupted review note references ignored without crashing static exporter
+  - `B20.5`: Target branch ref missing from repository handled safely in merge-base resolution
+
+---
 
 ### Tier 3: Cross-Feature Combinations
-- **`e2e/tier3_combinations/c06_ref_switch_to_blame_permalink_flow.js`** — 1 test
-  - `C6.1`: Full workflow: RefSelector tag switch -> Blame calculation -> Range selection -> Immutable permalink
-- **`e2e/tier3_combinations/c07_permalink_load_to_archive_download_flow.js`** — 1 test
-  - `C7.1`: Load immutable permalink route, verify line highlighting, and export exact commit snapshot
-- **`e2e/tier3_combinations/c08_blame_diff_navigation_and_raw_export.js`** — 1 test
-  - `C8.1`: Navigate Blame hunks -> Follow diff link -> Review diff -> Extract raw blob
+
+- **`e2e/tier3_combinations/c09_pr_lifecycle.js`** — 2 tests
+  - `C09.1`: Complete PR lifecycle from branch creation to 3-way diff and review notes
+  - `C09.2`: Merging PR updates status, decrements open PR count, and updates `meta.json`
+
+- **`e2e/tier3_combinations/c10_issue_label_flow.js`** — 2 tests
+  - `C10.1`: Multi-label filtering and discussion timeline workflow
+  - `C10.2`: Closing an issue updates status in `issues.json` and decrements open count in `meta.json`
+
+- **`e2e/tier3_combinations/c11_deep_link_tabs.js`** — 2 tests
+  - `C11.1`: Deep-link transitions across PR tabs and Issue views
+  - `C11.2`: URL hash format stability across roundtrips
+
+- **`e2e/tier3_combinations/c12_fallback_to_spa.js`** — 2 tests
+  - `C12.1`: Pull Requests static fallback HTML matches `pulls.json` data payload
+  - `C12.2`: Issues static fallback HTML matches `issues.json` data payload
+
+---
 
 ### Tier 4: Real-World Application Workloads
-- **`e2e/tier4_workloads/w05_multibranch_multitag_full_workflow.js`** — 1 test
-  - `W5.1`: Complete multi-branch multi-tag session: RefSelector -> Tree -> Blame -> Permalink -> Archive
-- **`e2e/tier4_workloads/w06_deep_blame_provenance_validation.js`** — 1 test
-  - `W6.1`: In-harness blame matches native `git blame --line-porcelain` 100% line-for-line
-- **`e2e/tier4_workloads/w07_snapshot_archive_extraction_validation.js`** — 1 test
-  - `W7.1`: In-browser ZIP and Tarball archives extract and match native repo byte-for-byte
+
+- **`e2e/tier4_workloads/w08_multi_repo_collab.js`** — 2 tests
+  - `W08.1`: Multi-repository simulation with 10+ PRs and 20+ issues
+  - `W08.2`: Concurrent server operation maintains ref isolation between repositories
+
+- **`e2e/tier4_workloads/w09_scraper_flood.js`** — 2 tests
+  - `W09.1`: High-concurrency flood (200 requests) targeting collaboration endpoints
+  - `W09.2`: Low response latency under concurrent load
+
+- **`e2e/tier4_workloads/w10_git_dumb_http_collab.js`** — 2 tests
+  - `W10.1`: Native Git CLI can clone repository over HTTP
+  - `W10.2`: Native Git CLI can fetch `refs/pull/*` over HTTP
+
+- **`e2e/tier4_workloads/w11_thousand_commit_dag.js`** — 2 tests
+  - `W11.1`: In-harness DAG merge-base resolves LCA across deep commit chain
+  - `W11.2`: 100% agreement between in-harness DAG merge-base and native `git merge-base`
 
 ---
 
