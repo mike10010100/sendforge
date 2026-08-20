@@ -1,11 +1,17 @@
+<p align="center">
+  <img src="assets/hero-banner.png" alt="Sendforge Hero Banner" width="100%" />
+</p>
+
 # 🚀 Sendforge
 
 > **A high-performance, static-first Git forge powered by `sendfile(2)` static serving and in-browser Git resolution.**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/Rust-100%25%20Safe%20%7C%20No%20Unsafe-orange.svg)](src/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-Strict%20%7C%20Zero%20Any-blue.svg)](client/)
-[![Tests](https://img.shields.io/badge/Tests-118%20E2E%20Passed-brightgreen.svg)](e2e/)
+<p align="left">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
+  <a href="src/"><img src="https://img.shields.io/badge/Rust-100%25%20Safe%20%7C%20No%20Unsafe-orange.svg" alt="Rust 100% Safe" /></a>
+  <a href="client/"><img src="https://img.shields.io/badge/TypeScript-Strict%20%7C%20Zero%20Any-blue.svg" alt="TypeScript Strict" /></a>
+  <a href="e2e/"><img src="https://img.shields.io/badge/Tests-118%20E2E%20Passed-brightgreen.svg" alt="Tests 118 Passed" /></a>
+</p>
 
 ---
 
