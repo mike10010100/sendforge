@@ -35,9 +35,16 @@ jobs:
       - name: Export Static Site
         run: |
           # Convert current repository clone to bare repo with full object copy
-          git clone --no-local --bare . /tmp/bare-repo.git
-          echo "Sendforge - High-performance static-first Git forge" > /tmp/bare-repo.git/description
-          ./target/release/sendforge export /tmp/bare-repo.git ./public-dist --frontend-dist ./dist
+          git clone --no-local --bare . /tmp/sendforge.git
+          echo "A high-performance, static-first Git forge powered by sendfile(2) and in-browser Git resolution." > /tmp/sendforge.git/description
+          cat << 'EOF' >> /tmp/sendforge.git/config
+
+[sendforge]
+	name = sendforge
+	owner = mike10010100
+	clone_url = https://github.com/mike10010100/sendforge.git
+EOF
+          ./target/release/sendforge export /tmp/sendforge.git ./public-dist --frontend-dist ./dist
 
       - name: Deploy to Cloudflare Pages
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != '' }}
