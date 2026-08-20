@@ -288,9 +288,7 @@ pub fn generate_repo_metadata(
                 .ok()
                 .map(|s| s.trim().to_string())
         })
-        .filter(|s| {
-            !s.is_empty() && !s.starts_with("Unnamed repository; edit this file")
-        });
+        .filter(|s| !s.is_empty() && !s.starts_with("Unnamed repository; edit this file"));
 
     let owner = options
         .and_then(|o| o.owner.clone())

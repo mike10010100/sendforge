@@ -44,20 +44,16 @@ jobs:
           ./target/release/sendforge export /tmp/sendforge.git ./public-dist --frontend-dist ./dist
 
       - name: Deploy to Cloudflare Pages
+        id: deploy_pages
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != '' }}
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy ./public-dist --project-name=sendforge
+        continue-on-error: true
+        run: |
+          npx wrangler pages deploy ./public-dist --project-name=sendforge --commit-dirty=true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
-      - name: Cloudflare Setup Notice
-        if: ${{ env.CLOUDFLARE_API_TOKEN == '' || env.CLOUDFLARE_ACCOUNT_ID == '' }}
+      - name: Cloudflare Deployment Notice
+        if: ${{ steps.deploy_pages.outcome == 'failure' || env.CLOUDFLARE_API_TOKEN == '' || env.CLOUDFLARE_ACCOUNT_ID == '' }}
         run: |
-          echo "::notice title=Cloudflare Deployment Skipped::To enable automatic zero-cost deployment to Cloudflare Pages, add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID to your GitHub Repository Secrets."
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          echo "::notice title=Cloudflare Deployment Status::To deploy automatically via GitHub Actions, ensure a valid Cloudflare API Token (with Account.Cloudflare Pages Edit permission) is stored in GitHub Secrets as CLOUDFLARE_API_TOKEN and Account ID as CLOUDFLARE_ACCOUNT_ID."
