@@ -8,5 +8,6 @@
 	url = /Users/mike10010100/git/hybrid-gitforge/.
 [sendforge]
 	name = sendforge
+	description = A high-performance, static-first Git forge powered by sendfile(2) static serving and in-browser Git resolution.
 	owner = mike10010100
 	cloneUrl = https://github.com/mike10010100/sendforge.git

@@ -1,28 +1,51 @@
 {
   "name": "sendforge",
-  "description": "Unnamed repository; edit this file 'description' to name the repository.",
+  "description": "A high-performance, static-first Git forge powered by sendfile(2) static serving and in-browser Git resolution.",
   "owner": "mike10010100",
   "clone_url": "https://github.com/mike10010100/sendforge.git",
   "default_branch": "main",
   "branches": [
     {
       "name": "main",
-      "target": "efd72e5b78deb9c256af6ad554884d15aa3c14e1",
-      "is_default": true
+      "target": "b712297ee9dabbcccd2603fa4665a28d82bb02b4",
+      "is_default": true,
+      "latest_commit_date": "2026-08-20T03:23:55Z"
     }
   ],
   "tags": [],
   "head": {
     "ref": "refs/heads/main",
-    "sha": "efd72e5b78deb9c256af6ad554884d15aa3c14e1"
+    "sha": "b712297ee9dabbcccd2603fa4665a28d82bb02b4"
+  },
+  "latest_commit": {
+    "id": "b712297ee9dabbcccd2603fa4665a28d82bb02b4",
+    "short_id": "b712297",
+    "tree": "3227e8bfff78aa9c317d4e25f82aa54516fd4613",
+    "parents": [
+      "efd72e5b78deb9c256af6ad554884d15aa3c14e1"
+    ],
+    "author": {
+      "name": "Michael Paulauski",
+      "email": "mike10010100@gmail.com",
+      "timestamp": 1787196235,
+      "date": "2026-08-20T03:23:55Z"
+    },
+    "committer": {
+      "name": "Michael Paulauski",
+      "email": "mike10010100@gmail.com",
+      "timestamp": 1787196235,
+      "date": "2026-08-20T03:23:55Z"
+    },
+    "message": "fix(ui): group markdown paragraph lines inline for side-by-side badges and bundle hero banner asset",
+    "summary": "fix(ui): group markdown paragraph lines inline for side-by-side badges and bundle hero banner asset"
   },
   "stats": {
     "branch_count": 1,
     "tag_count": 0,
-    "commit_count": 0,
-    "file_count": 0
+    "commit_count": 13,
+    "file_count": 19
   },
-  "has_readme": false,
-  "readme_filename": null,
-  "updated_at": "2026-08-20T03:23:41Z"
+  "has_readme": true,
+  "readme_filename": "README.md",
+  "updated_at": "2026-08-20T03:30:57Z"
 }

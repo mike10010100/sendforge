@@ -385,7 +385,12 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
               setActiveTab('commits');
             }}
           >
-            📜 Commits {meta && <span className="badge">{meta.stats.commit_count}</span>}
+            📜 Commits{' '}
+            {meta && (
+              <span className="badge">
+                {commitHistory.length > 0 ? commitHistory.length : meta.stats.commit_count}
+              </span>
+            )}
           </button>
           <button
             type="button"

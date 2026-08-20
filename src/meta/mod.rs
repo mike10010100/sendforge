@@ -113,6 +113,7 @@ pub struct SendforgeRepoMeta {
 #[derive(Default)]
 struct ParsedRepoConfig {
     name: Option<String>,
+    description: Option<String>,
     owner: Option<String>,
     clone_url: Option<String>,
 }
@@ -138,6 +139,7 @@ fn read_repo_config(repo_path: &Path) -> ParsedRepoConfig {
                 if !val.is_empty() {
                     match key.as_str() {
                         "name" => parsed.name = Some(val),
+                        "description" | "desc" => parsed.description = Some(val),
                         "owner" => parsed.owner = Some(val),
                         "cloneurl" | "clone_url" => parsed.clone_url = Some(val),
                         _ => {}
@@ -279,13 +281,16 @@ pub fn generate_repo_metadata(
 
     let repo_desc = options
         .and_then(|o| o.description.clone())
+        .or(repo_config.description)
         .or_else(|| {
             let desc_path = repo_path.join("description");
             fs::read_to_string(desc_path)
                 .ok()
                 .map(|s| s.trim().to_string())
         })
-        .filter(|s| !s.is_empty());
+        .filter(|s| {
+            !s.is_empty() && !s.starts_with("Unnamed repository; edit this file")
+        });
 
     let owner = options
         .and_then(|o| o.owner.clone())

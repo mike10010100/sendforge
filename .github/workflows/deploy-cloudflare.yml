@@ -38,6 +38,7 @@ jobs:
           git clone --no-local --bare . /tmp/sendforge.git
           echo "A high-performance, static-first Git forge powered by sendfile(2) and in-browser Git resolution." > /tmp/sendforge.git/description
           git --git-dir=/tmp/sendforge.git config sendforge.name "sendforge"
+          git --git-dir=/tmp/sendforge.git config sendforge.description "A high-performance, static-first Git forge powered by sendfile(2) static serving and in-browser Git resolution."
           git --git-dir=/tmp/sendforge.git config sendforge.owner "mike10010100"
           git --git-dir=/tmp/sendforge.git config sendforge.cloneUrl "https://github.com/mike10010100/sendforge.git"
           ./target/release/sendforge export /tmp/sendforge.git ./public-dist --frontend-dist ./dist
