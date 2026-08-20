@@ -106,25 +106,27 @@ flowchart TD
 
 ## 6. Functional Requirements
 
-### 6.1 Phase 1: MVP (Code & History Browser)
-- [ ] **Repository Listing & Discovery:** Static dashboard listing available repositories, descriptions, and last updated timestamps.
-- [ ] **Pre-rendered Landing Pages:** Fast, zero-JS view of repository root, file tree, and rendered `README.md`.
-- [ ] **In-Browser Repository Navigation:**
-  - Branch and tag switching without full-page reloads.
+### 6.1 Phase 1: MVP (Code & History Browser) — COMPLETE ✅
+- [x] **Repository Initialization & Discovery:** `sendforge init` sets up bare repos with dumb HTTP server-info and `post-receive` hooks.
+- [x] **Pre-rendered Landing Pages:** Fast, zero-JS view of repository root, file tree, and rendered `README.md` via `pulldown-cmark`.
+- [x] **In-Browser Repository Navigation:**
+  - Fast branch and tag switching without full-page reloads.
   - Interactive file tree navigation and blob viewer with syntax highlighting and line numbers.
   - Commit history timeline with author metadata, commit messages, and signatures.
-  - Interactive commit diff viewer (unified and split diffs).
-- [ ] **Git Push Integration:** Minimal `post-receive` hook script that updates static metadata and generates static entry points.
-- [ ] **Static Deployment Support:** Ability to export the entire static webroot to run from any static host (S3, Cloudflare Pages, Caddy, Nginx).
+  - Interactive commit diff viewer (unified and split diffs) computed off-thread in a Web Worker.
+- [x] **Git Push Integration:** `post-receive` hook updates `info/refs`, generates `meta.json`, and pre-renders static HTML fallbacks.
+- [x] **Static Deployment Support:** `sendforge export` bundles bare repos, static fallbacks, and the client SPA for zero-compute hosting on S3, Cloudflare Pages, Caddy, or Nginx.
 
-### 6.2 Phase 2: Enhanced Navigation & Diagnostics
-- [ ] **In-Browser `git blame`:** Client-side blame calculation tracing line origins.
-- [ ] **Fuzzy File Search:** Fast keyboard-driven file search (`Ctrl+K` / `T`).
+### 6.2 Phase 2: Enhanced Navigation & Refined UX
+- [ ] **Tabbed Ref Selector:** Separate Branches and Tags into dedicated tabbed selector panels with instantaneous filter/search instead of a combined dropdown.
+- [ ] **In-Browser `git blame`:** Client-side blame calculation tracing line origins across commit parent chains.
 - [ ] **Raw Blob Download & Archive Generation:** Client-side ZIP/tarball generation from Git tree objects.
+- [ ] **Line-Number Permalinks:** Highlight and share direct line links (`#L12-L34`) in the file viewer.
 
-### 6.3 Phase 3: Git-Native Issues & Discussions
-- [ ] **`git-bug` / Git-Ref Issue Viewer:** Client-side rendering of issue threads, labels, and status.
-- [ ] **Patch / Pull Request Viewer:** Review patchsets submitted as Git refs with inline comments.
+### 6.3 Phase 3: Git-Native Pull Requests & Issues
+- [ ] **`refs/pull/*` Patch & Pull Request Viewer:** Review patchsets submitted as Git refs with client-side 3-way merge base diff calculation.
+- [ ] **`git-bug` / Git-Ref Issue Viewer:** Client-side rendering of issue threads, labels, and status stored directly as Git references.
+- [ ] **Discussion / Review Comments:** Offline-first review notes stored in `refs/notes/reviews`.
 
 ---
 
@@ -135,27 +137,14 @@ flowchart TD
 | **Time to First Byte (TTFB)** | < 15ms (served purely as static assets) |
 | **Server CPU on Scrape Flood** | < 5% CPU under heavy concurrent scraping |
 | **Zero-JS Accessibility** | Core README and file tree viewable with JavaScript disabled |
-| **Client Bundle Size** | < 80 KB gzipped for the core reader UI |
-| **Deployment Complexity** | Single binary or lightweight static script + static web server |
+| **Client Bundle Size** | < 35 KB gzipped for the complete SPA |
+| **Safety Posture** | `#![forbid(unsafe_code)]`, zero-unwrap/expect, zero-`any` TypeScript |
 
 ---
 
 ## 8. Technology Stack Choices
 
-* **Backend / CLI / Hook Tooling:** Go (single binary for generating static entrypoints, repo initialization, and running a minimal static file server).
-* **Frontend UI:** TypeScript + modern reactive UI with progressive enhancement.
-* **Client-Side Git Parser:** Custom minimal Git loose-object parser in TypeScript + Web Workers for off-main-thread diffing.
-* **Styling:** Clean, minimalist CSS / Tailwind, responsive on mobile and desktop.
-
----
-
-## 9. Next Steps & Execution Roadmap
-
-1. **Sprint 1: Core Hook & Static Metadata Generator (`sendforge cli`)**
-   - Implement repository scanner and `post-receive` hook that outputs `meta.json` and static HTML fallback.
-2. **Sprint 2: Client-Side Object Fetcher & Parser (`sendforge-core`)**
-   - Implement browser TypeScript client that fetches `/objects/xx/xxx` loose objects, parses `tree`, `commit`, and `blob` objects with zlib decompression.
-3. **Sprint 3: Web UI & Diffing Engine (`sendforge-ui`)**
-   - Build file tree viewer, syntax highlighter, and client-side diff generator.
-4. **Sprint 4: End-to-End Packaging & Demo**
-   - Provide single-binary setup for serving local bare repos with instant live browser interface.
+* **Backend / CLI / Hook Tooling:** Rust (`sendforge` binary enforcing `#![forbid(unsafe_code)]`, strict Clippy deny list, `thiserror`).
+* **Frontend UI:** TypeScript + Preact (reactive SPA, 32.48 kB gzipped).
+* **Client-Side Git Parser:** Pure TypeScript binary loose object parsers (`commit`, `tree`, `blob`, `tag`) + Web Worker Myers LCS diff engine.
+* **Styling:** Clean, minimalist dark-mode CSS with responsive layouts.
