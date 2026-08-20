@@ -57,3 +57,32 @@ jobs:
 
       - name: Vite Production Build
         run: npm run build
+
+  e2e-check:
+    name: End-to-End Test Suite (234 Suites)
+    runs-on: ubuntu-latest
+    needs: [rust-check, ts-check]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Dependencies & Build Frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build Sendforge CLI
+        run: cargo build
+
+      - name: Run E2E Test Suite
+        run: ./e2e/run_e2e.sh
