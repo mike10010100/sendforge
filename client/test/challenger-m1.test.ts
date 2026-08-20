@@ -184,7 +184,10 @@ describe('Empirical Challenger: Packfile & Delta Engine (Milestone M1)', () => {
       const packIndex = PackIndex.parse(new Uint8Array(idxBuf));
 
       // Run git verify-pack to get list of objects, types, sizes, and offsets
-      const verifyOutput = execSync(`git verify-pack -v "${realIdxFile}"`, { encoding: 'utf-8' });
+      const verifyOutput = execSync(`git verify-pack -v "${realIdxFile}"`, {
+        encoding: 'utf-8',
+        maxBuffer: 64 * 1024 * 1024,
+      });
       const lines = verifyOutput.split('\n');
 
       interface ObjectEntry {
@@ -237,7 +240,10 @@ describe('Empirical Challenger: Packfile & Delta Engine (Milestone M1)', () => {
       const packSize = packBuf.length;
 
       // Extract objects from git verify-pack
-      const verifyOutput = execSync(`git verify-pack -v "${realIdxFile}"`, { encoding: 'utf-8' });
+      const verifyOutput = execSync(`git verify-pack -v "${realIdxFile}"`, {
+        encoding: 'utf-8',
+        maxBuffer: 64 * 1024 * 1024,
+      });
       const lines = verifyOutput.split('\n');
 
       const nonDeltaBlobs: string[] = [];
