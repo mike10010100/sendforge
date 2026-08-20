@@ -37,7 +37,9 @@ jobs:
           # Convert current repository clone to bare repo with full object copy
           git clone --no-local --bare . /tmp/sendforge.git
           echo "A high-performance, static-first Git forge powered by sendfile(2) and in-browser Git resolution." > /tmp/sendforge.git/description
-          printf '\n[sendforge]\n\tname = sendforge\n\towner = mike10010100\n\tclone_url = https://github.com/mike10010100/sendforge.git\n' >> /tmp/sendforge.git/config
+          git --git-dir=/tmp/sendforge.git config sendforge.name "sendforge"
+          git --git-dir=/tmp/sendforge.git config sendforge.owner "mike10010100"
+          git --git-dir=/tmp/sendforge.git config sendforge.cloneUrl "https://github.com/mike10010100/sendforge.git"
           ./target/release/sendforge export /tmp/sendforge.git ./public-dist --frontend-dist ./dist
 
       - name: Deploy to Cloudflare Pages
