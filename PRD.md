@@ -144,6 +144,25 @@ flowchart TD
   - TypeScript `strict: true`, zero `any`, `@typescript-eslint/strict-type-checked`.
   - Comprehensive unit, integration, and E2E regression suites covering packfile delta reconstruction and patch export.
 
+### 6.5 Phase 5: Fuzzy Search, Multi-Repo Forge Hub, Serverless Gateway & Offline PWA
+- [ ] **Global Keyboard-Driven Fuzzy File Finder (`Cmd+K` / `Ctrl+K` / `T`):**
+  - Fast in-memory tree path indexer with client-side fuzzy ranking and matched substring highlighting.
+  - Keyboard-navigable command palette modal (`↑`/`↓`/`Enter`/`Esc`) with instantaneous file jump and line permalink support.
+- [ ] **Multi-Repository Portfolio & Forge Dashboard:**
+  - CLI command `sendforge export --all <repos-dir>` scanning multiple bare Git repositories.
+  - Generates root forge dashboard (`repos.json`, `index.html`) with repository cards, owner groupings, commit activity indicators, and global search/filtering.
+  - Top navigation bar breadcrumbs supporting seamless repository switching.
+- [ ] **Lightweight Serverless Write Gateway (Cloudflare Worker):**
+  - Optional zero-database edge function endpoint (`/api/submit/issue`, `/api/submit/pr`) for direct in-browser issue/PR submissions.
+  - Validates payload schemas and writes Git refs (`refs/issues/*`, `refs/pull/*`) directly to storage.
+- [ ] **Progressive Web App (PWA) & Full Offline Caching:**
+  - Service Worker caching layer enabling instant offline repository browsing, tree navigation, and diff resolution.
+  - Web App Manifest with icons, offline status badge, and background sync.
+- [ ] **Safety & Verification Standards:**
+  - `#![forbid(unsafe_code)]`, zero-unwrap/panic, strict Clippy denial.
+  - TypeScript `strict: true`, zero `any`, `@typescript-eslint/strict-type-checked`.
+  - Comprehensive unit, integration, and E2E regression suites covering fuzzy search, multi-repo indexing, and offline caching.
+
 ---
 
 ## 7. Non-Functional Requirements
