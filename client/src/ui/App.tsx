@@ -23,11 +23,41 @@ import { PullRequestsView } from './PullRequestsView.js';
 import { PRDetailView } from './PRDetailView.js';
 import { NewIssueModal } from './NewIssueModal.js';
 import { NewPRModal } from './NewPRModal.js';
+import { DashboardView, type ForgeIndex } from './DashboardView.js';
 import { parseRoute, type Route } from './router.js';
 import { useEventListener, useStableCallback } from './hooks/useLifecycle.js';
 
 export interface AppProps {
   readonly baseUrl?: string;
+}
+
+function deriveCloneUrl(meta: RepoMeta | null, baseUrl?: string): string {
+  if (
+    meta &&
+    'clone_url' in meta &&
+    typeof (meta as { readonly clone_url?: unknown }).clone_url === 'string'
+  ) {
+    const customUrl = (meta as { readonly clone_url: string }).clone_url;
+    if (customUrl) {
+      return customUrl;
+    }
+  }
+  if (typeof window !== 'undefined' && window.location.origin && window.location.origin !== 'null') {
+    const origin = window.location.origin;
+    let pathname = window.location.pathname.replace(/\/index\.html$/, '').replace(/\/+$/, '');
+    if (!pathname || pathname === '') {
+      pathname = meta?.name ? `/${meta.name}.git` : '';
+    } else if (!pathname.endsWith('.git')) {
+      pathname = `${pathname}.git`;
+    }
+    return `${origin}${pathname}`;
+  }
+  if (baseUrl) {
+    const clean = baseUrl.replace(/\/+$/, '');
+    return clean.endsWith('.git') ? clean : `${clean}.git`;
+  }
+  const repoName = meta?.name ?? 'repo';
+  return `https://sendforge.local/${repoName}.git`;
 }
 
 export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
@@ -57,9 +87,33 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
   const [allFiles, setAllFiles] = useState<readonly TreeFileItem[]>([]);
 
   const [isFinderOpen, setIsFinderOpen] = useState(false);
+  const [isOffline, setIsOffline] = useState<boolean>(() => {
+    return typeof navigator !== 'undefined' && 'onLine' in navigator ? !navigator.onLine : false;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleOnline = () => {
+      setIsOffline(false);
+    };
+    const handleOffline = () => {
+      setIsOffline(true);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   const [isNewIssueOpen, setIsNewIssueOpen] = useState(false);
   const [isNewPROpen, setIsNewPROpen] = useState(false);
   const [isDownloadOpen, setIsDownloadOpen] = useState(false);
+  const [copiedClone, setCopiedClone] = useState(false);
   const [downloadingFormat, setDownloadingFormat] = useState<'zip' | 'tar.gz' | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<{ completed: number; total: number } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -240,47 +294,74 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
     [currentPath, currentRef, meta, selectedCommitDiff, loadCommitDiff, loadRefState]
   );
 
+  const [forgeIndex, setForgeIndex] = useState<ForgeIndex | null>(null);
+
   // Load initial repository metadata & collaboration catalogs
   useEffect(() => {
     let isMounted = true;
     const initMeta = async () => {
       try {
         setLoading(true);
-        const [repoMeta, loadedPulls, loadedIssues] = await Promise.all([
-          client.getMeta(),
-          collabClient.getPullRequests().catch(() => []),
-          collabClient.getIssues().catch(() => []),
-        ]);
+        let repoMeta: RepoMeta | null = null;
+        let loadedPulls: readonly PullRequest[] = [];
+        let loadedIssues: readonly Issue[] = [];
+        let loadedIndex: ForgeIndex | null = null;
 
-        if (!isMounted) return;
-        setMeta(repoMeta);
-        setPulls(loadedPulls);
-        setIssues(loadedIssues);
-        const defaultRef = repoMeta.default_branch || 'main';
-        setCurrentRef(defaultRef);
-
-        if (repoMeta.name) {
-          const title = repoMeta.description
-            ? `${repoMeta.name} — ${repoMeta.description}`
-            : `${repoMeta.name} — Sendforge`;
-          document.title = title;
-          const ogTitleEl = document.querySelector('meta[property="og:title"]');
-          if (ogTitleEl) ogTitleEl.setAttribute('content', title);
-          const twTitleEl = document.querySelector('meta[name="twitter:title"]');
-          if (twTitleEl) twTitleEl.setAttribute('content', title);
-          if (repoMeta.description) {
-            const ogDescEl = document.querySelector('meta[property="og:description"]');
-            if (ogDescEl) ogDescEl.setAttribute('content', repoMeta.description);
-            const twDescEl = document.querySelector('meta[name="twitter:description"]');
-            if (twDescEl) twDescEl.setAttribute('content', repoMeta.description);
+        try {
+          [repoMeta, loadedPulls, loadedIssues] = await Promise.all([
+            client.getMeta(),
+            collabClient.getPullRequests().catch(() => []),
+            collabClient.getIssues().catch(() => []),
+          ]);
+        } catch {
+          // If meta.json fails, check if repos.json is present for Forge Hub mode
+          try {
+            const resp = await fetch(`${baseUrl}repos.json`);
+            if (resp.ok) {
+              loadedIndex = (await resp.json()) as ForgeIndex;
+            }
+          } catch {
+            // neither found
           }
         }
 
-        const hash = typeof window !== 'undefined' ? window.location.hash : '';
-        if (hash) {
-          handleRouteChange(hash);
+        if (!isMounted) return;
+
+        if (loadedIndex) {
+          setForgeIndex(loadedIndex);
+          document.title = `${loadedIndex.title || 'Sendforge Hub'} — Portfolio`;
+        } else if (repoMeta) {
+          setMeta(repoMeta);
+          setPulls(loadedPulls);
+          setIssues(loadedIssues);
+          const defaultRef = repoMeta.default_branch || 'main';
+          setCurrentRef(defaultRef);
+
+          if (repoMeta.name) {
+            const title = repoMeta.description
+              ? `${repoMeta.name} — ${repoMeta.description}`
+              : `${repoMeta.name} — Sendforge`;
+            document.title = title;
+            const ogTitleEl = document.querySelector('meta[property="og:title"]');
+            if (ogTitleEl) ogTitleEl.setAttribute('content', title);
+            const twTitleEl = document.querySelector('meta[name="twitter:title"]');
+            if (twTitleEl) twTitleEl.setAttribute('content', title);
+            if (repoMeta.description) {
+              const ogDescEl = document.querySelector('meta[property="og:description"]');
+              if (ogDescEl) ogDescEl.setAttribute('content', repoMeta.description);
+              const twDescEl = document.querySelector('meta[name="twitter:description"]');
+              if (twDescEl) twDescEl.setAttribute('content', repoMeta.description);
+            }
+          }
+
+          const hash = typeof window !== 'undefined' ? window.location.hash : '';
+          if (hash) {
+            handleRouteChange(hash);
+          } else {
+            void loadRefState(defaultRef, '');
+          }
         } else {
-          void loadRefState(defaultRef, '');
+          setError('Failed to load repository metadata.');
         }
       } catch (err) {
         if (!isMounted) return;
@@ -295,7 +376,7 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
     return () => {
       isMounted = false;
     };
-  }, [client, collabClient, handleRouteChange, loadRefState]);
+  }, [baseUrl, client, collabClient, handleRouteChange, loadRefState]);
 
   const handleHashChange = useStableCallback(() => {
     if (typeof window !== 'undefined') {
@@ -314,7 +395,15 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
     } else if (
       e.key.toLowerCase() === 't' &&
       !isFinderOpen &&
-      !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)
+      !e.ctrlKey &&
+      !e.metaKey &&
+      !e.altKey &&
+      !(
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement ||
+        (e.target as HTMLElement | null)?.isContentEditable
+      )
     ) {
       e.preventDefault();
       setIsFinderOpen(true);
@@ -335,6 +424,23 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
       setIsDownloadOpen(false);
     }
   });
+
+  const cloneUrl = deriveCloneUrl(meta, baseUrl);
+  const gitCloneCommand = `git clone ${cloneUrl}`;
+
+  const handleCopyClone = async () => {
+    try {
+      if (typeof navigator !== 'undefined' && 'clipboard' in navigator) {
+        await navigator.clipboard.writeText(gitCloneCommand);
+      }
+      setCopiedClone(true);
+      setTimeout(() => {
+        setCopiedClone(false);
+      }, 2000);
+    } catch {
+      // Fallback gracefully
+    }
+  };
 
   const handleDownloadSnapshot = async (format: 'zip' | 'tar.gz') => {
     if (!currentCommit || downloadingFormat !== null) return;
@@ -370,22 +476,23 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
     }
   };
 
-  const handleNavigatePath = (newPath: string, isTree: boolean) => {
+  const handleNavigatePath = (newPath: string, isTree: boolean, targetLine?: number) => {
     setActiveTab('code');
     setSelectedIssueId(null);
     setSelectedPullId(null);
     setSelectedCommitDiff(null);
 
+    const lineHash = targetLine !== undefined && targetLine > 0 ? `#L${String(targetLine)}` : '';
     const hash = isTree
       ? newPath
         ? `#/tree/${newPath}`
         : '#/'
-      : `#/blob/${newPath}`;
+      : `#/blob/${newPath}${lineHash}`;
     window.location.hash = hash;
   };
 
-  const handleSelectFileFromFinder = (path: string) => {
-    handleNavigatePath(path, false);
+  const handleSelectFileFromFinder = (path: string, targetLine?: number) => {
+    handleNavigatePath(path, false, targetLine);
   };
 
   const pathSegments = currentPath ? currentPath.split('/') : [];
@@ -411,11 +518,33 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
     extendedStats?.open_pull_count ?? pulls.filter((p) => p.status === 'open').length;
   const commitsCount = meta?.stats.commit_count ?? commitHistory.length;
 
+  if (forgeIndex && !meta) {
+    return (
+      <DashboardView
+        index={forgeIndex}
+        onSelectRepo={(targetPath) => {
+          if (typeof window !== 'undefined') {
+            window.location.href = targetPath;
+          }
+        }}
+      />
+    );
+  }
+
   return (
     <div className="app-container">
       <header className="header">
         <div className="header-top">
           <div className="repo-brand">
+            <a
+              href="../"
+              className="hub-breadcrumb-link"
+              title="Back to Forge Hub"
+              data-testid="hub-breadcrumb-link"
+            >
+              🏛️ Forge Hub
+            </a>
+            <span className="breadcrumb-separator">/</span>
             <span className="repo-icon">📦</span>
             <a
               href="#/"
@@ -434,6 +563,17 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
           </div>
 
           <div className="header-actions">
+            {isOffline && (
+              <span
+                className="offline-badge"
+                title="You are currently browsing cached repository data offline"
+                data-testid="offline-status-badge"
+                role="status"
+              >
+                <span className="offline-dot" />
+                <span>Offline Mode</span>
+              </span>
+            )}
             <button
               type="button"
               className="btn"
@@ -566,7 +706,53 @@ export const App: FunctionalComponent<AppProps> = ({ baseUrl = '' }) => {
 
                 {isDownloadOpen && (
                   <div className="download-dropdown-menu" role="menu">
-                    <div className="download-dropdown-header">Clone or download snapshot</div>
+                    <div className="download-dropdown-header">Clone</div>
+                    <div className="clone-url-container">
+                      <label className="clone-url-label" htmlFor="clone-url-input">
+                        Clone with Git over HTTP
+                      </label>
+                      <div className="clone-url-input-group">
+                        <input
+                          id="clone-url-input"
+                          type="text"
+                          readOnly
+                          className="clone-url-input"
+                          value={gitCloneCommand}
+                          onClick={(e) => {
+                            (e.target as HTMLInputElement).select();
+                          }}
+                          onFocus={(e) => {
+                            (e.target as HTMLInputElement).select();
+                          }}
+                          aria-label="Git clone command"
+                          data-testid="clone-url-input"
+                        />
+                        <button
+                          type="button"
+                          className={`btn clone-copy-btn ${copiedClone ? 'copied' : ''}`}
+                          onClick={() => {
+                            void handleCopyClone();
+                          }}
+                          title={copiedClone ? 'Copied to clipboard!' : 'Copy to clipboard'}
+                          aria-label={copiedClone ? 'Copied to clipboard' : 'Copy git clone command'}
+                          data-testid="copy-clone-btn"
+                        >
+                          {copiedClone ? (
+                            <>
+                              <span className="copy-icon">✓</span>
+                              <span>Copied!</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="copy-icon">📋</span>
+                              <span>Copy</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="download-dropdown-header">Download Snapshot Archive</div>
                     <button
                       type="button"
                       className="download-dropdown-item"

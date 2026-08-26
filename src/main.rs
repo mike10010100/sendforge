@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 
-use sendforge::export::{export_static_site, ExportOptions};
+use sendforge::export::{export_multi_repository, export_static_site, ExportOptions};
 use sendforge::hook::{handle_post_receive_stdin, run_hook_update};
 use sendforge::repo::{init_bare_repo, InitOptions};
 use sendforge::server::{run_server, ServerOptions};
@@ -104,13 +104,17 @@ enum Commands {
 
     /// Export a standalone static directory ready for S3, Cloudflare Pages, Caddy, or Nginx
     Export {
-        /// Path to the source bare Git repository
-        #[arg(value_name = "REPO_PATH")]
-        repo_path: PathBuf,
+        /// Path to the source bare Git repository (when exporting a single repository)
+        #[arg(value_name = "REPO_PATH", required_unless_present = "all")]
+        repo_path: Option<PathBuf>,
+
+        /// Discover and export all bare Git repositories within a directory into a portfolio forge
+        #[arg(long = "all", value_name = "REPOS_DIR", conflicts_with = "repo_path")]
+        all: Option<PathBuf>,
 
         /// Destination directory for the exported static site
         #[arg(value_name = "OUTPUT_DIR")]
-        output_dir: PathBuf,
+        output_dir: Option<PathBuf>,
 
         /// Path to compiled frontend SPA distribution assets to merge
         #[arg(long = "frontend-dist")]
@@ -160,6 +164,40 @@ fn resolve_repo_path(repo_arg: Option<PathBuf>) -> anyhow::Result<PathBuf> {
 
     let cwd = env::current_dir().context("Failed to get current working directory")?;
     Ok(cwd)
+}
+
+fn run_export(
+    repo_path: Option<&PathBuf>,
+    all: Option<&PathBuf>,
+    output_dir: Option<&PathBuf>,
+    options: &ExportOptions,
+) -> anyhow::Result<()> {
+    let Some(output_dir) = output_dir else {
+        anyhow::bail!("Missing required output directory argument");
+    };
+    if let Some(repos_dir) = all {
+        export_multi_repository(repos_dir, output_dir, options).with_context(|| {
+            format!(
+                "Failed to export multi-repository portfolio from {} to {}",
+                repos_dir.display(),
+                output_dir.display()
+            )
+        })?;
+        eprintln!(
+            "[sendforge] Successfully exported multi-repository portfolio to {}",
+            output_dir.display()
+        );
+    } else if let Some(single_repo) = repo_path {
+        export_static_site(single_repo, output_dir, options)
+            .with_context(|| format!("Failed to export static site to {}", output_dir.display()))?;
+        eprintln!(
+            "[sendforge] Successfully exported static site to {}",
+            output_dir.display()
+        );
+    } else {
+        anyhow::bail!("Must specify either a repository path or --all <REPOS_DIR>");
+    }
+    Ok(())
 }
 
 fn main() -> anyhow::Result<()> {
@@ -218,6 +256,7 @@ fn main() -> anyhow::Result<()> {
 
         Commands::Export {
             repo_path,
+            all,
             output_dir,
             frontend_dist,
             base_url,
@@ -228,13 +267,12 @@ fn main() -> anyhow::Result<()> {
                 base_url,
                 no_objects,
             };
-            export_static_site(&repo_path, &output_dir, &options).with_context(|| {
-                format!("Failed to export static site to {}", output_dir.display())
-            })?;
-            eprintln!(
-                "[sendforge] Successfully exported static site to {}",
-                output_dir.display()
-            );
+            run_export(
+                repo_path.as_ref(),
+                all.as_ref(),
+                output_dir.as_ref(),
+                &options,
+            )?;
         }
 
         Commands::Serve {

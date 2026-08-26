@@ -468,6 +468,23 @@ export const NewIssueModal: FunctionalComponent<NewIssueModalProps> = ({
                 </button>
               );
             })}
+            {selectedLabels
+              .filter((label) => !PRESET_LABELS.includes(label))
+              .map((label) => (
+                <button
+                  key={label}
+                  type="button"
+                  className="label-chip selected"
+                  onClick={() => {
+                    handleToggleLabel(label);
+                  }}
+                  data-testid={`issue-custom-chip-${label}`}
+                  title={`Remove label ${label}`}
+                >
+                  {label}
+                  <span className="label-chip-remove">✕</span>
+                </button>
+              ))}
           </div>
 
           {/* Custom Label Input */}

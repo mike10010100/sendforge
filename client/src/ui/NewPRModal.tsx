@@ -10,6 +10,20 @@ import type { FileDiff } from '../worker/diff-types.js';
 import { generateFormatPatchRange, formatSinglePatch } from '../engine/patch.js';
 import { formatRelativeTime, formatSha, renderMarkdown } from './utils.js';
 
+const PRESET_LABELS: readonly string[] = [
+  'bug',
+  'enhancement',
+  'documentation',
+  'duplicate',
+  'good first issue',
+  'help wanted',
+  'invalid',
+  'question',
+  'wontfix',
+  'security',
+  'performance',
+];
+
 export interface NewPRModalProps {
   /** Controls modal visibility */
   readonly isOpen: boolean;
@@ -34,6 +48,7 @@ export interface PRDraft {
   readonly description: string;
   readonly targetBranch: string;
   readonly sourceBranch: string;
+  readonly selectedLabels?: readonly string[];
   readonly authorName: string;
   readonly authorEmail: string;
   readonly customId: string;
@@ -146,6 +161,12 @@ export const NewPRModal: FunctionalComponent<NewPRModalProps> = ({
   const [title, setTitle] = useState(() => initialDraft?.title ?? '');
   const [description, setDescription] = useState(() => initialDraft?.description ?? '');
   const [editorTab, setEditorTab] = useState<'write' | 'preview'>('write');
+  const [selectedLabels, setSelectedLabels] = useState<string[]>(() =>
+    Array.isArray(initialDraft?.selectedLabels)
+      ? initialDraft.selectedLabels.filter((l): l is string => typeof l === 'string')
+      : []
+  );
+  const [customLabelInput, setCustomLabelInput] = useState('');
   const [authorName, setAuthorName] = useState(() => initialDraft?.authorName ?? 'Anonymous');
   const [authorEmail, setAuthorEmail] = useState(() => initialDraft?.authorEmail ?? 'anonymous@sendforge.local');
   const [customId, setCustomId] = useState(() => initialDraft?.customId ?? String(nextNumber));
@@ -175,6 +196,9 @@ export const NewPRModal: FunctionalComponent<NewPRModalProps> = ({
       if (draft.description !== undefined) setDescription(draft.description);
       if (draft.targetBranch) setTargetBranch(draft.targetBranch);
       if (draft.sourceBranch) setSourceBranch(draft.sourceBranch);
+      if (Array.isArray(draft.selectedLabels)) {
+        setSelectedLabels(draft.selectedLabels.filter((l): l is string => typeof l === 'string'));
+      }
       if (draft.authorName) setAuthorName(draft.authorName);
       if (draft.authorEmail) setAuthorEmail(draft.authorEmail);
       if (draft.customId) setCustomId(draft.customId);
@@ -203,13 +227,14 @@ export const NewPRModal: FunctionalComponent<NewPRModalProps> = ({
       description,
       targetBranch,
       sourceBranch,
+      selectedLabels,
       authorName,
       authorEmail,
       customId,
       updatedAt: Date.now(),
     };
     saveDraftToStorage(draft, repoName);
-  }, [isOpen, title, description, targetBranch, sourceBranch, authorName, authorEmail, customId, repoName]);
+  }, [isOpen, title, description, targetBranch, sourceBranch, selectedLabels, authorName, authorEmail, customId, repoName]);
 
   // Compare branches whenever targetBranch or sourceBranch changes
   useEffect(() => {
@@ -343,9 +368,25 @@ export const NewPRModal: FunctionalComponent<NewPRModalProps> = ({
     }
   };
 
+  const handleToggleLabel = (label: string) => {
+    setSelectedLabels((prev) =>
+      prev.includes(label) ? prev.filter((l) => l !== label) : [...prev, label]
+    );
+  };
+
+  const handleAddCustomLabel = () => {
+    const trimmed = customLabelInput.trim();
+    if (trimmed && !selectedLabels.includes(trimmed)) {
+      setSelectedLabels((prev) => [...prev, trimmed]);
+      setCustomLabelInput('');
+    }
+  };
+
   const handleClearDraft = () => {
     setTitle('');
     setDescription('');
+    setSelectedLabels([]);
+    setCustomLabelInput('');
     setAuthorName('Anonymous');
     setAuthorEmail('anonymous@sendforge.local');
     setCustomId(String(nextNumber));
@@ -434,7 +475,7 @@ export const NewPRModal: FunctionalComponent<NewPRModalProps> = ({
       status: 'open',
       created_at: now,
       updated_at: now,
-      labels: [],
+      labels: selectedLabels,
       comments: [],
     };
 
@@ -467,7 +508,7 @@ export const NewPRModal: FunctionalComponent<NewPRModalProps> = ({
       status: 'open',
       createdAt: now,
       updatedAt: now,
-      labels: [],
+      labels: selectedLabels,
       comments: [],
     };
 
@@ -734,6 +775,78 @@ export const NewPRModal: FunctionalComponent<NewPRModalProps> = ({
               }}
             />
           )}
+        </div>
+
+        {/* Labels Selection Bar */}
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px', color: 'var(--text-primary)' }}>
+            Labels
+          </label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }} data-testid="pr-label-presets">
+            {PRESET_LABELS.map((label) => {
+              const isSelected = selectedLabels.includes(label);
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  className={`label-chip ${isSelected ? 'selected' : ''}`}
+                  onClick={() => {
+                    handleToggleLabel(label);
+                  }}
+                  data-testid={`pr-preset-label-${label}`}
+                >
+                  {label}
+                  {isSelected && <span className="label-chip-remove">✕</span>}
+                </button>
+              );
+            })}
+            {selectedLabels
+              .filter((label) => !PRESET_LABELS.includes(label))
+              .map((label) => (
+                <button
+                  key={label}
+                  type="button"
+                  className="label-chip selected"
+                  onClick={() => {
+                    handleToggleLabel(label);
+                  }}
+                  data-testid={`pr-custom-chip-${label}`}
+                  title={`Remove label ${label}`}
+                >
+                  {label}
+                  <span className="label-chip-remove">✕</span>
+                </button>
+              ))}
+          </div>
+
+          {/* Custom Label Input */}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <input
+              type="text"
+              className="finder-input"
+              style={{ maxWidth: '200px', fontSize: '12px', padding: '4px 8px' }}
+              placeholder="Custom label..."
+              value={customLabelInput}
+              onInput={(e) => {
+                setCustomLabelInput(e.currentTarget.value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleAddCustomLabel();
+                }
+              }}
+              data-testid="pr-custom-label-input"
+            />
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={handleAddCustomLabel}
+              data-testid="add-pr-custom-label-btn"
+            >
+              Add Label
+            </button>
+          </div>
         </div>
 
         {/* Author Metadata & Custom ID */}

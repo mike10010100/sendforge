@@ -7,6 +7,13 @@ use crate::error::{Result, SendforgeError};
 use crate::hook::run_hook_update;
 use crate::repo::refs::atomic_write_file;
 
+pub mod multi;
+
+pub use multi::{
+    build_repo_card, discover_repositories, export_multi_repository, DiscoveredRepo,
+    ForgeCommitSummary, ForgeIndex, ForgeRepoCard, ForgeRepoStats,
+};
+
 /// Options for configuring the static site export.
 #[derive(Debug, Clone, Default)]
 pub struct ExportOptions {
@@ -19,7 +26,7 @@ pub struct ExportOptions {
 }
 
 /// Recursively copies a directory tree to a destination directory.
-fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
+pub(crate) fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
     if !src.is_dir() {
         return Ok(());
     }

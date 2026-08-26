@@ -54,6 +54,7 @@ export default tseslint.config(
       'src/**',
       'e2e/**',
       '.agents/**',
+      'public/**',
       '*.config.js'
     ],
   }

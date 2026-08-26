@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [preact()],
   test: {
     environment: 'node',
+    maxWorkers: 4,
     include: [
       'client/test/**/*.test.ts',
       'client/test/**/*.test.tsx',

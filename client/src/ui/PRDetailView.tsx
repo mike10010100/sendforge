@@ -45,6 +45,22 @@ export const PRDetailView: FunctionalComponent<PRDetailViewProps> = ({
 
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [copiedSha, setCopiedSha] = useState<string | null>(null);
+
+  const handleCopySha = async (sha: string, e: MouseEvent) => {
+    e.stopPropagation();
+    try {
+      if (typeof navigator !== 'undefined' && 'clipboard' in navigator) {
+        await navigator.clipboard.writeText(sha);
+      }
+      setCopiedSha(sha);
+      setTimeout(() => {
+        setCopiedSha((cur) => (cur === sha ? null : cur));
+      }, 2000);
+    } catch {
+      // Fallback gracefully
+    }
+  };
 
   // Sync prop activeTab to internal state if changed externally
   useEffect(() => {
@@ -673,20 +689,52 @@ export const PRDetailView: FunctionalComponent<PRDetailViewProps> = ({
                           </div>
 
                           <div className="commit-item-actions">
-                            <button
-                              type="button"
-                              className="btn btn-sm commit-sha-btn"
-                              onClick={() => {
-                                if (onSelectCommit) {
-                                  onSelectCommit(commit.oid);
-                                } else {
-                                  window.location.hash = `#/commit/${commit.oid}`;
+                            <div className="commit-sha-wrapper">
+                              <button
+                                type="button"
+                                className="btn btn-sm commit-sha-btn"
+                                onClick={() => {
+                                  if (onSelectCommit) {
+                                    onSelectCommit(commit.oid);
+                                  } else {
+                                    window.location.hash = `#/commit/${commit.oid}`;
+                                  }
+                                }}
+                                data-testid={`commit-sha-${commit.oid}`}
+                              >
+                                <code>{formatSha(commit.oid)}</code>
+                              </button>
+                              <button
+                                type="button"
+                                className={`commit-copy-btn ${copiedSha === commit.oid ? 'copied' : ''}`}
+                                title={copiedSha === commit.oid ? 'Copied!' : 'Copy full SHA'}
+                                aria-label={
+                                  copiedSha === commit.oid
+                                    ? 'Copied to clipboard'
+                                    : `Copy full commit SHA for ${formatSha(commit.oid)}`
                                 }
-                              }}
-                              data-testid={`commit-sha-${commit.oid}`}
-                            >
-                              <code>{formatSha(commit.oid)}</code>
-                            </button>
+                                onClick={(e) => {
+                                  void handleCopySha(commit.oid, e);
+                                }}
+                                data-testid={`copy-pr-sha-${commit.oid}`}
+                              >
+                                {copiedSha === commit.oid ? (
+                                  <span className="copy-feedback">✓ Copied</span>
+                                ) : (
+                                  <svg
+                                    className="copy-icon"
+                                    viewBox="0 0 16 16"
+                                    width="12"
+                                    height="12"
+                                    fill="currentColor"
+                                    aria-hidden="true"
+                                  >
+                                    <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z" />
+                                    <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z" />
+                                  </svg>
+                                )}
+                              </button>
+                            </div>
                           </div>
                         </div>
                       );

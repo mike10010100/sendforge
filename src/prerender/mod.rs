@@ -1,4 +1,8 @@
-//! Zero-JS HTML pre-rendering engine and `CommonMark` markdown renderer.
+//! Zero-JS HTML pre-rendering engine, Forge Dashboard generator, and `CommonMark` markdown renderer.
+
+pub mod dashboard;
+
+pub use dashboard::render_dashboard_html;
 
 use pulldown_cmark::{html, CowStr, Event, Options, Parser, Tag};
 use std::fmt::Write as _;
