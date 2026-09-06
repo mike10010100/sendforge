@@ -22,15 +22,19 @@ import {
   tokenizeFile,
 } from './syntax.js';
 
-function uint8ArrayToBase64(bytes: Uint8Array): string {
+export function uint8ArrayToBase64(bytes: Uint8Array): string {
   if (typeof Buffer !== 'undefined') {
     return Buffer.from(bytes).toString('base64');
   }
-  let binary = '';
+  const CHUNK_SIZE = 32768;
+  const chunks: string[] = [];
   const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[i] ?? 0);
+  for (let i = 0; i < len; i += CHUNK_SIZE) {
+    const end = Math.min(i + CHUNK_SIZE, len);
+    const sub = bytes.subarray(i, end);
+    chunks.push(String.fromCharCode(...sub));
   }
+  const binary = chunks.join('');
   return typeof btoa !== 'undefined' ? btoa(binary) : '';
 }
 
@@ -78,7 +82,23 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
     initialRange ? initialRange.start : propSelectedRange ? propSelectedRange.start : null
   );
   const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(() => {
+    if (
+      isImage &&
+      typeof URL !== 'undefined' &&
+      typeof URL.createObjectURL === 'function' &&
+      typeof Blob !== 'undefined'
+    ) {
+      try {
+        const mimeType = getImageMimeType(path);
+        const blobObj = new Blob([blob.data as BlobPart], { type: mimeType });
+        return URL.createObjectURL(blobObj);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
   const [BlameComponent, setBlameComponent] = useState<FunctionalComponent<BlameViewProps> | null>(null);
 
   // In-file search state
@@ -181,7 +201,12 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
 
   // Manage Object URL for image blobs with clean auto-revocation
   useEffect(() => {
-    if (isImage && typeof URL !== 'undefined' && typeof Blob !== 'undefined') {
+    if (
+      isImage &&
+      typeof URL !== 'undefined' &&
+      typeof URL.createObjectURL === 'function' &&
+      typeof Blob !== 'undefined'
+    ) {
       const mimeType = getImageMimeType(path);
       const blobObj = new Blob([blob.data as BlobPart], { type: mimeType });
       const url = URL.createObjectURL(blobObj);
@@ -202,9 +227,13 @@ export const BlobView: FunctionalComponent<BlobViewProps> = ({
     }
   }, [viewMode, BlameComponent]);
 
+  const hasObjectUrl =
+    typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function';
   const imageSrc =
     imageUrl ??
-    (isImage ? `data:${getImageMimeType(path)};base64,${uint8ArrayToBase64(blob.data)}` : undefined);
+    (isImage && !hasObjectUrl
+      ? `data:${getImageMimeType(path)};base64,${uint8ArrayToBase64(blob.data)}`
+      : undefined);
 
   const updateUrlLineHash = (range: LineRange | null) => {
     if (typeof window === 'undefined') return;
