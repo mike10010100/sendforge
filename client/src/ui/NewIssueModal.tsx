@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { FunctionalComponent } from 'preact';
 import type { Issue } from '../engine/collab-client.js';
 import { escapeShellDoubleQuotes } from '../engine/edge-client.js';
+import { useFocusTrap } from './hooks/useFocusTrap.js';
 import { renderMarkdown } from './utils.js';
 
 export interface NewIssueModalProps {
@@ -150,7 +151,14 @@ export const NewIssueModal: FunctionalComponent<NewIssueModalProps> = ({
   const [copiedCommand, setCopiedCommand] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  const modalContentRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
+
+  useFocusTrap({
+    isActive: isOpen,
+    containerRef: modalContentRef,
+    initialFocusRef: titleInputRef,
+  });
 
   // Restore draft or initialize on open
   useEffect(() => {
@@ -329,8 +337,12 @@ export const NewIssueModal: FunctionalComponent<NewIssueModalProps> = ({
       tabIndex={-1}
     >
       <div
+        ref={modalContentRef}
         className="modal-content new-issue-modal-content"
         data-testid="new-issue-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="new-issue-modal-title"
         style={{ maxWidth: '780px', maxHeight: '90vh', overflowY: 'auto', padding: '24px' }}
       >
         {/* Modal Header */}
