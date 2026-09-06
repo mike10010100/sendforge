@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { FunctionalComponent } from 'preact';
 import type { Issue } from '../engine/collab-client.js';
+import { escapeShellDoubleQuotes } from '../engine/edge-client.js';
 import { renderMarkdown } from './utils.js';
 
 export interface NewIssueModalProps {
@@ -198,9 +199,11 @@ export const NewIssueModal: FunctionalComponent<NewIssueModalProps> = ({
 
   // Generated Git commands
   const gitPushCommand = `git push origin HEAD:refs/issues/${cleanId}`;
-  const commitTitle = title.replace(/"/g, '\\"') || 'Issue title';
-  const commitDesc = description.replace(/"/g, '\\"');
-  const gitCommitHelperCommand = `git commit --allow-empty -m "${commitTitle}" -m "${commitDesc}" && ${gitPushCommand}`;
+  const commitTitle = escapeShellDoubleQuotes(title.trim() || 'Issue title');
+  const commitDesc = escapeShellDoubleQuotes(description.trim());
+  const gitCommitHelperCommand = commitDesc
+    ? `git commit --allow-empty -m "${commitTitle}" -m "${commitDesc}" && ${gitPushCommand}`
+    : `git commit --allow-empty -m "${commitTitle}" && ${gitPushCommand}`;
 
   const handleCopyCommand = async () => {
     try {
