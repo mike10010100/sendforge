@@ -9,6 +9,7 @@ import { computeTreeFullDiff } from '../worker/diff-algo.js';
 import type { FileDiff } from '../worker/diff-types.js';
 import { generateFormatPatchRange, formatSinglePatch } from '../engine/patch.js';
 import { formatRelativeTime, formatSha, renderMarkdown } from './utils.js';
+import { useFocusTrap } from './hooks/useFocusTrap.js';
 
 const PRESET_LABELS: readonly string[] = [
   'bug',
@@ -184,7 +185,14 @@ export const NewPRModal: FunctionalComponent<NewPRModalProps> = ({
   const [copiedCommand, setCopiedCommand] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  const modalContentRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
+
+  useFocusTrap({
+    isActive: isOpen,
+    containerRef: modalContentRef,
+    initialFocusRef: titleInputRef,
+  });
 
   // Restore draft on open
   useEffect(() => {
@@ -555,8 +563,12 @@ export const NewPRModal: FunctionalComponent<NewPRModalProps> = ({
       tabIndex={-1}
     >
       <div
+        ref={modalContentRef}
         className="modal-content new-pr-modal-content"
         data-testid="new-pr-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="new-pr-modal-title"
         style={{ maxWidth: '850px', maxHeight: '90vh', overflowY: 'auto', padding: '24px' }}
       >
         {/* Modal Header */}

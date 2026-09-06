@@ -7,6 +7,7 @@ import {
   type FuzzyMatchResult,
   highlightMatchedSpans,
 } from '../engine/tree-indexer.js';
+import { useFocusTrap } from './hooks/useFocusTrap.js';
 
 export interface FileFinderProps {
   readonly files: readonly TreeFileItem[] | readonly TreeEntry[];
@@ -53,8 +54,15 @@ export const FileFinder: FunctionalComponent<FileFinderProps> = ({
 }) => {
   const [query, setQuery] = useState(initialQuery);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const modalContentRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+
+  useFocusTrap({
+    isActive: isOpen,
+    containerRef: modalContentRef,
+    initialFocusRef: inputRef,
+  });
 
   // Initialize and memoize tree indexer
   const indexer = useMemo(() => new TreeIndexer(files), [files]);
@@ -148,7 +156,13 @@ export const FileFinder: FunctionalComponent<FileFinderProps> = ({
         }
       }}
     >
-      <div className="modal-content finder-modal-content" role="dialog" aria-modal="true" aria-label="File Finder">
+      <div
+        ref={modalContentRef}
+        className="modal-content finder-modal-content"
+        role="dialog"
+        aria-modal="true"
+        aria-label="File Finder"
+      >
         {/* Search Header */}
         <div className="finder-input-container">
           <span className="finder-search-icon" aria-hidden="true">
