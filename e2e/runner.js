@@ -48,7 +48,7 @@ Usage:
   ./e2e/run_e2e.sh [options]
 
 Options:
-  --tier <1|2|3|4|all>   Select test tier to execute (default: all)
+  --tier <1|2|3|4|5|phase5|all> Select test tier to execute (default: all)
   --format <console|tap|junit> Output reporting format (default: console)
   --tap                  Shortcut for --format tap
   --junit                Shortcut for --format junit
@@ -65,6 +65,8 @@ Options:
     '2': [path.join(__dirname, 'tier2_boundaries')],
     '3': [path.join(__dirname, 'tier3_combinations')],
     '4': [path.join(__dirname, 'tier4_workloads')],
+    '5': [path.join(__dirname, 'suites')],
+    'phase5': [path.join(__dirname, 'suites')],
     'all': [
       path.join(__dirname, 'tier1_features'),
       path.join(__dirname, 'tier2_boundaries'),
