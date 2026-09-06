@@ -129,3 +129,53 @@ fn test_percent_decoding_and_path_traversal() {
     let encoded_traversal = sanitize_path(root, "/%2e%2e/etc/passwd");
     assert!(encoded_traversal.is_err());
 }
+
+#[test]
+fn test_symlink_containment_validation() -> Result<(), Box<dyn std::error::Error>> {
+    let dir = tempfile::tempdir()?;
+    let root = dir.path().join("server_root");
+    std::fs::create_dir_all(&root)?;
+
+    // Safe regular file
+    let safe_file = root.join("index.html");
+    std::fs::write(&safe_file, b"<h1>Sendforge</h1>")?;
+
+    // Safe symlink pointing inside root
+    let safe_link = root.join("link_safe.html");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&safe_file, &safe_link)?;
+
+    // Outside file
+    let outside_dir = dir.path().join("outside");
+    std::fs::create_dir_all(&outside_dir)?;
+    let secret_file = outside_dir.join("secret.txt");
+    std::fs::write(&secret_file, b"classified_data")?;
+
+    // Malicious symlink pointing outside root
+    let evil_link = root.join("evil_link.txt");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&secret_file, &evil_link)?;
+
+    // 1. Safe file resolves
+    let res = sendforge::server::resolve_candidate_file(&root, "/index.html", false)?;
+    assert!(res.is_some());
+
+    // 2. Safe symlink resolves
+    #[cfg(unix)]
+    {
+        let res = sendforge::server::resolve_candidate_file(&root, "/link_safe.html", false)?;
+        assert!(res.is_some());
+    }
+
+    // 3. Symlink outside root fails with PathTraversal
+    #[cfg(unix)]
+    {
+        let res = sendforge::server::resolve_candidate_file(&root, "/evil_link.txt", false);
+        assert!(
+            matches!(res, Err(sendforge::error::SendforgeError::PathTraversal(_))),
+            "Symlink traversal outside root must be rejected with PathTraversal"
+        );
+    }
+
+    Ok(())
+}

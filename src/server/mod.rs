@@ -186,7 +186,12 @@ fn send_full_content(stream: &mut TcpStream, mut file: File, headers: &str, is_g
     }
 }
 
-fn resolve_candidate_file(root_dir: &Path, uri: &str, spa: bool) -> Result<Option<PathBuf>> {
+/// Resolves an incoming URI to a validated local candidate file path.
+///
+/// # Errors
+/// Returns `SendforgeError::PathTraversal` if directory traversal or symlink escape
+/// outside `root_dir` is detected.
+pub fn resolve_candidate_file(root_dir: &Path, uri: &str, spa: bool) -> Result<Option<PathBuf>> {
     let target_path = sanitize_path(root_dir, uri)?;
     let decoded = percent_decode(uri);
     let trimmed_path = decoded
@@ -259,7 +264,18 @@ fn resolve_candidate_file(root_dir: &Path, uri: &str, spa: bool) -> Result<Optio
     }
 
     if candidate.is_file() {
-        Ok(Some(candidate))
+        if let (Ok(canonical_candidate), Ok(canonical_root)) =
+            (candidate.canonicalize(), root_dir.canonicalize())
+        {
+            if canonical_candidate.starts_with(&canonical_root) {
+                return Ok(Some(candidate));
+            }
+            return Err(SendforgeError::PathTraversal(format!(
+                "Symlink traversal outside root directory detected: {}",
+                candidate.display()
+            )));
+        }
+        Ok(None)
     } else {
         Ok(None)
     }
