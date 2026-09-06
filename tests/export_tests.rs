@@ -363,3 +363,53 @@ fn test_multi_repo_export_with_frontend_dist_and_schema_validation(
 
     Ok(())
 }
+
+#[test]
+fn test_cli_export_argument_parsing() -> Result<(), Box<dyn std::error::Error>> {
+    let bin_path = env!("CARGO_BIN_EXE_sendforge");
+    let dir = tempdir()?;
+    let repos_dir = dir.path().join("repos");
+    fs::create_dir_all(&repos_dir)?;
+    let repo1 = repos_dir.join("repo1.git");
+    init_bare_repo(&repo1, &InitOptions::default())?;
+
+    // 1. Single repo export: sendforge export <repo> <out>
+    let single_out = dir.path().join("single_out");
+    let status = std::process::Command::new(bin_path)
+        .args([
+            "export",
+            repo1.to_str().unwrap(),
+            single_out.to_str().unwrap(),
+        ])
+        .status()?;
+    assert!(
+        status.success(),
+        "sendforge export <repo> <out> must succeed"
+    );
+    assert!(single_out.join("index.html").is_file());
+
+    // 2. Multi-repo export: sendforge export --all <repos_dir> <out_all>
+    let multi_out = dir.path().join("multi_out");
+    let status = std::process::Command::new(bin_path)
+        .args([
+            "export",
+            "--all",
+            repos_dir.to_str().unwrap(),
+            multi_out.to_str().unwrap(),
+        ])
+        .status()?;
+    assert!(
+        status.success(),
+        "sendforge export --all <repos_dir> <out_all> must succeed"
+    );
+    assert!(multi_out.join("index.html").is_file());
+    assert!(multi_out.join("repos.json").is_file());
+
+    // 3. Error when missing destination
+    let status = std::process::Command::new(bin_path)
+        .args(["export", "--all", repos_dir.to_str().unwrap()])
+        .status()?;
+    assert!(!status.success(), "export without destination should fail");
+
+    Ok(())
+}
