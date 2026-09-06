@@ -104,15 +104,15 @@ enum Commands {
 
     /// Export a standalone static directory ready for S3, Cloudflare Pages, Caddy, or Nginx
     Export {
-        /// Path to the source bare Git repository (when exporting a single repository)
-        #[arg(value_name = "REPO_PATH", required_unless_present = "all")]
-        repo_path: Option<PathBuf>,
+        /// Primary path argument: path to source bare repo (single-repo) or destination output directory (multi-repo --all)
+        #[arg(value_name = "PATH")]
+        path: Option<PathBuf>,
 
         /// Discover and export all bare Git repositories within a directory into a portfolio forge
-        #[arg(long = "all", value_name = "REPOS_DIR", conflicts_with = "repo_path")]
+        #[arg(long = "all", value_name = "REPOS_DIR")]
         all: Option<PathBuf>,
 
-        /// Destination directory for the exported static site
+        /// Destination directory for the exported static site (when exporting a single repository)
         #[arg(value_name = "OUTPUT_DIR")]
         output_dir: Option<PathBuf>,
 
@@ -167,15 +167,16 @@ fn resolve_repo_path(repo_arg: Option<PathBuf>) -> anyhow::Result<PathBuf> {
 }
 
 fn run_export(
-    repo_path: Option<&PathBuf>,
+    path: Option<&PathBuf>,
     all: Option<&PathBuf>,
     output_dir: Option<&PathBuf>,
     options: &ExportOptions,
 ) -> anyhow::Result<()> {
-    let Some(output_dir) = output_dir else {
-        anyhow::bail!("Missing required output directory argument");
-    };
     if let Some(repos_dir) = all {
+        let dest = output_dir.or(path);
+        let Some(output_dir) = dest else {
+            anyhow::bail!("Missing required output directory argument");
+        };
         export_multi_repository(repos_dir, output_dir, options).with_context(|| {
             format!(
                 "Failed to export multi-repository portfolio from {} to {}",
@@ -187,7 +188,10 @@ fn run_export(
             "[sendforge] Successfully exported multi-repository portfolio to {}",
             output_dir.display()
         );
-    } else if let Some(single_repo) = repo_path {
+    } else if let Some(single_repo) = path {
+        let Some(output_dir) = output_dir else {
+            anyhow::bail!("Missing required output directory argument");
+        };
         export_static_site(single_repo, output_dir, options)
             .with_context(|| format!("Failed to export static site to {}", output_dir.display()))?;
         eprintln!(
@@ -255,7 +259,7 @@ fn main() -> anyhow::Result<()> {
         }
 
         Commands::Export {
-            repo_path,
+            path,
             all,
             output_dir,
             frontend_dist,
@@ -267,12 +271,7 @@ fn main() -> anyhow::Result<()> {
                 base_url,
                 no_objects,
             };
-            run_export(
-                repo_path.as_ref(),
-                all.as_ref(),
-                output_dir.as_ref(),
-                &options,
-            )?;
+            run_export(path.as_ref(), all.as_ref(), output_dir.as_ref(), &options)?;
         }
 
         Commands::Serve {
