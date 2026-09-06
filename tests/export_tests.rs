@@ -413,3 +413,99 @@ fn test_cli_export_argument_parsing() -> Result<(), Box<dyn std::error::Error>> 
 
     Ok(())
 }
+
+#[test]
+fn test_export_preserves_packfiles_and_extracts_loose_objects(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let dir = tempdir()?;
+    let repo_path = dir.path().join("packed_source.git");
+    let export_dir = dir.path().join("exported_packed");
+
+    init_bare_repo(&repo_path, &InitOptions::default())?;
+
+    // Create a working tree, add commits, and push to bare repo
+    let work_tree = dir.path().join("work_tree");
+    let status = std::process::Command::new("git")
+        .args([
+            "clone",
+            repo_path.to_str().unwrap(),
+            work_tree.to_str().unwrap(),
+        ])
+        .status()?;
+    assert!(status.success());
+
+    fs::write(work_tree.join("sample.txt"), b"packfile safety check\n")?;
+    let _ = std::process::Command::new("git")
+        .current_dir(&work_tree)
+        .args(["config", "user.name", "Pack Tester"])
+        .status();
+    let _ = std::process::Command::new("git")
+        .current_dir(&work_tree)
+        .args(["config", "user.email", "pack@test.com"])
+        .status();
+    let _ = std::process::Command::new("git")
+        .current_dir(&work_tree)
+        .args(["add", "."])
+        .status();
+    let _ = std::process::Command::new("git")
+        .current_dir(&work_tree)
+        .args(["commit", "-m", "Pack commit"])
+        .status();
+    let _ = std::process::Command::new("git")
+        .current_dir(&work_tree)
+        .args(["push", "origin", "main"])
+        .status();
+
+    // Repack bare repo to pack all objects and delete loose objects
+    let status = std::process::Command::new("git")
+        .current_dir(&repo_path)
+        .args(["repack", "-a", "-d"])
+        .status()?;
+    assert!(status.success());
+
+    // Verify packfile exists in source bare repo
+    let pack_dir = repo_path.join("objects").join("pack");
+    let pack_entries: Vec<_> = fs::read_dir(&pack_dir)?
+        .flatten()
+        .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("pack"))
+        .collect();
+    assert_eq!(
+        pack_entries.len(),
+        1,
+        "Source bare repo must contain exactly one packfile"
+    );
+
+    // Perform static site export
+    let options = ExportOptions::default();
+    export_static_site(&repo_path, &export_dir, &options)?;
+
+    // 1. Verify source repo's packfile was NOT deleted
+    let pack_entries_after: Vec<_> = fs::read_dir(&pack_dir)?
+        .flatten()
+        .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("pack"))
+        .collect();
+    assert_eq!(
+        pack_entries_after.len(),
+        1,
+        "Source repo packfile must be preserved"
+    );
+
+    // 2. Verify exported site has the packfile copied
+    let exported_pack_dir = export_dir.join("objects").join("pack");
+    let exported_packs: Vec<_> = fs::read_dir(&exported_pack_dir)?
+        .flatten()
+        .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("pack"))
+        .collect();
+    assert_eq!(
+        exported_packs.len(),
+        1,
+        "Exported site must contain copied packfile"
+    );
+
+    // 3. Verify loose objects exist in exported site and meta.json has correct commit count
+    let meta_str = fs::read_to_string(export_dir.join("meta.json"))?;
+    let meta_json: serde_json::Value = serde_json::from_str(&meta_str)?;
+    assert_eq!(meta_json["stats"]["commit_count"], 1);
+
+    Ok(())
+}

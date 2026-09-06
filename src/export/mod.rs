@@ -50,40 +50,83 @@ pub(crate) fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
     Ok(())
 }
 
+struct PackRestoreGuard<'a> {
+    from: &'a Path,
+    to: &'a Path,
+}
+
+impl Drop for PackRestoreGuard<'_> {
+    fn drop(&mut self) {
+        if self.from.exists() {
+            let _ = fs::rename(self.from, self.to);
+        }
+    }
+}
+
 fn unpack_packfiles_if_present(repo_path: &Path) {
     let pack_dir = repo_path.join("objects").join("pack");
+    let temp_pack_dir = repo_path.join("objects").join("pack_tmp_unpack");
+
+    // Recover from any previous interrupted run if temporary directory is still present
+    if temp_pack_dir.exists() && !pack_dir.exists() {
+        let _ = fs::rename(&temp_pack_dir, &pack_dir);
+    }
+
     if !pack_dir.is_dir() {
         return;
     }
-    if let Ok(entries) = fs::read_dir(&pack_dir) {
-        let pack_files: Vec<std::path::PathBuf> = entries
-            .flatten()
-            .map(|e| e.path())
-            .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("pack"))
-            .collect();
 
-        for pack_path in pack_files {
-            if let Ok(pack_data) = fs::read(&pack_path) {
-                let _ = fs::remove_file(&pack_path);
-                let idx_path = pack_path.with_extension("idx");
-                let _ = fs::remove_file(&idx_path);
-                let rev_path = pack_path.with_extension("rev");
-                let _ = fs::remove_file(&rev_path);
+    let Ok(entries) = fs::read_dir(&pack_dir) else {
+        return;
+    };
 
-                if let Ok(mut child) = std::process::Command::new("git")
-                    .arg("--git-dir")
-                    .arg(repo_path)
-                    .arg("unpack-objects")
-                    .arg("-q")
-                    .stdin(std::process::Stdio::piped())
-                    .spawn()
-                {
-                    if let Some(mut stdin) = child.stdin.take() {
-                        use std::io::Write;
-                        let _ = stdin.write_all(&pack_data);
-                    }
-                    let _ = child.wait();
+    let pack_files: Vec<std::path::PathBuf> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("pack"))
+        .collect();
+
+    if pack_files.is_empty() {
+        return;
+    }
+
+    // Move pack_dir temporarily so `git unpack-objects` expands loose objects
+    // without skipping them due to perceived presence in packfiles.
+    if fs::rename(&pack_dir, &temp_pack_dir).is_err() {
+        return;
+    }
+
+    // RAII guard guarantees pack files are restored back to objects/pack even on early return
+    let _guard = PackRestoreGuard {
+        from: &temp_pack_dir,
+        to: &pack_dir,
+    };
+
+    let Ok(temp_entries) = fs::read_dir(&temp_pack_dir) else {
+        return;
+    };
+
+    let temp_pack_files: Vec<std::path::PathBuf> = temp_entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("pack"))
+        .collect();
+
+    for pack_path in temp_pack_files {
+        if let Ok(pack_data) = fs::read(&pack_path) {
+            if let Ok(mut child) = std::process::Command::new("git")
+                .arg("--git-dir")
+                .arg(repo_path)
+                .arg("unpack-objects")
+                .arg("-q")
+                .stdin(std::process::Stdio::piped())
+                .spawn()
+            {
+                if let Some(mut stdin) = child.stdin.take() {
+                    use std::io::Write;
+                    let _ = stdin.write_all(&pack_data);
                 }
+                let _ = child.wait();
             }
         }
     }
