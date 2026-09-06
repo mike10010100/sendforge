@@ -72,6 +72,19 @@ export interface OfflineDraftItem<T> {
 }
 
 /**
+ * Safely escapes a string for inclusion inside double-quoted shell arguments,
+ * preventing parameter expansion ($), command substitution ($(..), `..`),
+ * quote injection (\"), and backslash escaping (\\).
+ */
+export function escapeShellDoubleQuotes(str: string): string {
+  return str
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\$/g, '\\$')
+    .replace(/`/g, '\\`');
+}
+
+/**
  * In-memory fallback storage for Node.js / non-browser environments.
  */
 class MemoryStorage implements Storage {
@@ -279,9 +292,11 @@ export class EdgeGatewayClient {
     const cleanId = rawId.replace(/[^a-zA-Z0-9._-]/g, '_') || '1';
     const pushCommand = `git push origin HEAD:refs/issues/${cleanId}`;
 
-    const titleEscaped = (options.title || 'New Issue').replace(/"/g, '\\"');
-    const descEscaped = (options.description ?? '').replace(/"/g, '\\"');
-    const commitHelperCommand = descEscaped
+    const titleClean = (options.title || 'New Issue').trim();
+    const descClean = (options.description ?? '').trim();
+    const titleEscaped = escapeShellDoubleQuotes(titleClean);
+    const descEscaped = escapeShellDoubleQuotes(descClean);
+    const commitHelperCommand = descClean
       ? `git commit --allow-empty -m "${titleEscaped}" -m "${descEscaped}" && ${pushCommand}`
       : `git commit --allow-empty -m "${titleEscaped}" && ${pushCommand}`;
 
