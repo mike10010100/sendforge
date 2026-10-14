@@ -260,7 +260,7 @@ function computeContiguousMatch(
   const qLen = queryLower.length;
 
   // Check if match starts in filename first (prefer filename match)
-  let subIndex = -1;
+  let subIndex: number;
   const fnSubIndex = fileNameLower.indexOf(queryLower);
   if (fnSubIndex !== -1) {
     subIndex = fileNameOffset + fnSubIndex;

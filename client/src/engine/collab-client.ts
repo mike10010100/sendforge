@@ -396,7 +396,7 @@ export async function loadReviewNotes(
 ): Promise<ReviewNote[]> {
   const notes: ReviewNote[] = [];
 
-  let notesRefSha: GitOid | null = null;
+  let notesRefSha: GitOid | null;
   try {
     notesRefSha = await client.resolveRef('refs/notes/reviews');
   } catch {

@@ -221,7 +221,7 @@ export async function computeBlame(
       break;
     }
 
-    let parentEntry = null;
+    let parentEntry;
     try {
       parentEntry = await client.resolvePathToEntry(parentCommit.tree, cleanPath);
     } catch {

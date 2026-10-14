@@ -41,7 +41,7 @@ export function parseDeltaHeader(delta: Uint8Array): DeltaHeader {
   // 1. Decode base object size
   let baseSize = 0;
   let shift = 0;
-  let b = 0;
+  let b: number;
   do {
     if (ptr >= delta.length) {
       throw new MalformedDeltaError('Truncated delta header: unexpected EOF reading base size');

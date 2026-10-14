@@ -1,4 +1,4 @@
-import pako from 'pako';
+import * as pako from 'pako';
 import type { GitRepositoryClient } from './fetcher.js';
 
 export interface ArchiveFileEntry {

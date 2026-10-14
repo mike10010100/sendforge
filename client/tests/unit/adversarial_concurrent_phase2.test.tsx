@@ -24,7 +24,7 @@ import { GitRepositoryClient } from '../../src/engine/fetcher.js';
 import type { GitBlobObject, RepoBranch, RepoTag } from '../../src/engine/types.js';
 import { createCompressedGitObject, createTreePayload } from '../fixtures.js';
 import * as crypto from 'node:crypto';
-import pako from 'pako';
+import * as pako from 'pako';
 
 describe('Tier 5 Adversarial Coverage Hardening: Phase 2 Concurrent Interactions & Stress', () => {
   afterEach(() => {

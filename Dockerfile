@@ -1,7 +1,7 @@
 # Multi-stage build for Sendforge: Ultra-lean, high-performance static forge
 
 # Stage 1: Build the TypeScript Frontend SPA
-FROM node:22-alpine AS frontend-builder
+FROM node:26-alpine AS frontend-builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -10,7 +10,7 @@ COPY tsconfig.json vite.config.ts index.html ./
 RUN npm run build
 
 # Stage 2: Build the Rust CLI & Static Server
-FROM rust:1.85-alpine AS rust-builder
+FROM rust:1.99-alpine AS rust-builder
 WORKDIR /app
 RUN apk add --no-cache musl-dev
 COPY Cargo.toml Cargo.lock ./
@@ -18,7 +18,7 @@ COPY src/ ./src/
 RUN cargo build --release
 
 # Stage 3: Minimal Production Image (Alpine ~15MB total)
-FROM alpine:3.21 AS runner
+FROM alpine:3.24 AS runner
 WORKDIR /app
 
 RUN apk add --no-cache git ca-certificates tzdata \

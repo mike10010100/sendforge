@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import pako from 'pako';
+import * as pako from 'pako';
 import type { GitObjectType } from '../src/engine/types.js';
 
 /**

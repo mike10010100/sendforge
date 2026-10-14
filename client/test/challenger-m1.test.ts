@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
-import pako from 'pako';
+import * as pako from 'pako';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   applyGitDelta,

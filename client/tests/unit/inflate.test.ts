@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import pako from 'pako';
+import * as pako from 'pako';
 import { inflateZlib, inflateZlibSync, ZlibDecompressionError } from '../../src/engine/inflator.js';
 
 describe('Zlib Inflator', () => {

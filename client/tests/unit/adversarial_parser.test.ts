@@ -137,7 +137,6 @@ describe('Adversarial & Boundary Tests: Tree Objects', () => {
   });
 
   it('handles deeply nested directories (50+ path levels)', () => {
-    let currentPayload: Uint8Array = new Uint8Array(0);
     const depth = 60;
 
     for (let i = depth; i >= 1; i--) {
@@ -146,7 +145,7 @@ describe('Adversarial & Boundary Tests: Tree Objects', () => {
         name: `level_${i}`,
         oid: i.toString(16).padStart(2, '0').repeat(20),
       };
-      currentPayload = createTreePayload([entry]);
+      const currentPayload = createTreePayload([entry]);
       const tree = parseTreePayload(currentPayload, `tree_oid_${i}`);
       expect(tree.entries.length).toBe(1);
       expect(tree.entries[0]?.name).toBe(`level_${i}`);

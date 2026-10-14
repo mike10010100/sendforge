@@ -1,4 +1,4 @@
-import pako from 'pako';
+import * as pako from 'pako';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DeltaBaseCache } from '../src/engine/delta.js';
 import { GitRepositoryClient, ObjectNotFoundError } from '../src/engine/fetcher.js';

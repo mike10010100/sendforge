@@ -4,10 +4,10 @@ import { resolve } from 'node:path';
 
 export default defineConfig({
   plugins: [preact()],
-  root: resolve(__dirname, 'client/src'),
-  publicDir: resolve(__dirname, 'public'),
+  root: resolve(import.meta.dirname, 'client/src'),
+  publicDir: resolve(import.meta.dirname, 'public'),
   build: {
-    outDir: resolve(__dirname, 'dist'),
+    outDir: resolve(import.meta.dirname, 'dist'),
     emptyOutDir: true,
     target: 'es2022',
   },

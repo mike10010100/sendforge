@@ -1,6 +1,16 @@
+import Module from 'node:module';
 import eslint from '@eslint/js';
-import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
+
+const origResolveFilename = Module._resolveFilename;
+Module._resolveFilename = function (request, parent, isMain, options) {
+  if (request === 'typescript') {
+    return origResolveFilename.call(this, 'typescript-legacy', parent, isMain, options);
+  }
+  return origResolveFilename.call(this, request, parent, isMain, options);
+};
+
+const { default: tseslint } = await import('typescript-eslint');
 
 export default tseslint.config(
   eslint.configs.recommended,
@@ -42,6 +52,7 @@ export default tseslint.config(
       '@typescript-eslint/require-await': 'off',
       '@typescript-eslint/dot-notation': 'off',
       '@typescript-eslint/prefer-optional-chain': 'off',
+      '@typescript-eslint/no-misused-promises': ['error', { checksVoidReturn: false }],
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
   },

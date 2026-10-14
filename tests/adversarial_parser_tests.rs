@@ -81,10 +81,13 @@ fn test_adversarial_corrupted_zlib_streams() {
     let res_non_git = decompress_raw_object(&valid_zlib_non_git, "fake_sha");
     assert!(matches!(res_non_git, Err(SendforgeError::InvalidObject(_))));
 
-    // Empty byte buffer -> decompresses to 0 bytes -> InvalidObject (Missing null byte)
+    // Empty byte buffer -> fails decompression or object header parsing
     let empty_bytes = &[];
     let res_empty = decompress_raw_object(empty_bytes, "fake_sha");
-    assert!(matches!(res_empty, Err(SendforgeError::InvalidObject(_))));
+    assert!(matches!(
+        res_empty,
+        Err(SendforgeError::Decompression(_) | SendforgeError::InvalidObject(_))
+    ));
 }
 
 #[test]

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import pako from 'pako';
+import * as pako from 'pako';
 import {
   crc32,
   createZipArchive,

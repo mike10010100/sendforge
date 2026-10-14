@@ -15,7 +15,6 @@ const flushTicks = (): Promise<void> =>
 describe('Zero-Leak Lifecycle Hooks (useLifecycle.ts)', () => {
   describe('useStableCallback', () => {
     it('returns a stable function reference that calls the latest callback closure', async () => {
-      let currentVal = 10;
       let capturedStableFn: ((extra: number) => number) | undefined;
 
       const TestComp = ({ val }: { readonly val: number }) => {
@@ -35,7 +34,7 @@ describe('Zero-Leak Lifecycle Hooks (useLifecycle.ts)', () => {
       }
 
       // Re-render with new prop
-      currentVal = 25;
+      const currentVal = 25;
       render(h(TestComp, { val: currentVal }), container);
       await flushTicks();
 
@@ -96,7 +95,7 @@ describe('Zero-Leak Lifecycle Hooks (useLifecycle.ts)', () => {
       const TestComp = ({ count }: { readonly count: number }) => {
         useEventListener(mockTarget, 'click', () => {
           // handler closure changes every render
-          void count;
+          if (count < 0) return;
         });
         return h('div', null, `Count: ${count}`);
       };

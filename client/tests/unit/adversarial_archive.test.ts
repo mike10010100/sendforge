@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import pako from 'pako';
+import * as pako from 'pako';
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
