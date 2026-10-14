@@ -14,14 +14,14 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "pako": "^2.1.0",
+    "pako": "^3.0.2",
     "preact": "^10.26.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.20.0",
     "@preact/preset-vite": "^2.9.4",
     "@types/node": "^22.13.4",
-    "@types/pako": "^2.0.3",
+    "@types/pako": "^3.0.0",
     "eslint": "^9.20.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "happy-dom": "^20.11.6",
