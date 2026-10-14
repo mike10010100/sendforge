@@ -136,7 +136,7 @@ describe('Tier 2 - Boundaries B28-B31: Phase 5 Corner Cases & Boundary Hardening
 
     const res = supervisor.runCli(['export', '--all', emptyDir, outDir]);
     assert.notStrictEqual(res.status, 0, 'Exporting empty repo directory should return non-zero exit code');
-    assert.notIncludes(res.stderr, 'panic', 'CLI must not panic on empty repo directory');
+    assert.notIncludes(res.stderr, 'panicked at', 'CLI must not panic on empty repo directory');
   });
 
   it('B29.2: Deeply nested owner hierarchies extract multi-level owner prefixes', () => {
