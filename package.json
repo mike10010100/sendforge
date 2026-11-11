@@ -30,7 +30,7 @@
     "typescript-eslint": "^8.72.1",
     "typescript-legacy": "npm:typescript@^6.0.3",
     "vite": "^8.3.4",
-    "vitest": "^5.0.5"
+    "vitest": "^5.1.0"
   },
   "overrides": {
     "typescript": "^7.0.2",
